@@ -5,7 +5,12 @@ import com.almasb.fxgl.app.GameSettings;
 import com.almasb.fxgl.dsl.FXGL;
 import com.almasb.fxgl.entity.Entity;
 import com.almasb.fxgl.input.UserAction;
+import com.almasb.fxgl.app.scene.FXGLMenu;
+import com.almasb.fxgl.app.scene.MenuType;
+import com.almasb.fxgl.app.scene.SceneFactory;
+import com.almasb.fxgl.texture.Texture;
 import javafx.geometry.Point2D;
+import javafx.geometry.Pos;
 import javafx.scene.Group;
 import javafx.scene.SubScene;
 import javafx.scene.PerspectiveCamera;
@@ -26,6 +31,7 @@ import javafx.util.Duration;
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelReader;
 import javafx.scene.image.WritableImage;
+import javafx.scene.layout.StackPane;
 
 import static com.almasb.fxgl.dsl.FXGL.*;
 
@@ -83,6 +89,43 @@ public class LabyrinthApp extends GameApplication {
         settings.setGameMenuEnabled(true);
         // Allow fullscreen toggle from FXGL settings menu
         settings.setFullScreenAllowed(true);
+
+        // Customize main menu to add centered background image
+        final SceneFactory baseFactory = new SceneFactory();
+        settings.setSceneFactory(new SceneFactory() {
+            @Override
+            public FXGLMenu newMainMenu() {
+                FXGLMenu menu = baseFactory.newMainMenu();
+
+                // Load our image from /assets/textures and center it
+                Texture img = texture("main-menu-lab.png");
+
+                // Scale to 1/3 of screen while preserving aspect ratio
+                double boxW = getAppWidth() / 3.0;
+                double boxH = getAppHeight() / 3.0;
+                img.setPreserveRatio(true);
+                img.setFitWidth(boxW);
+                img.setFitHeight(boxH);
+
+                // Compute displayed size for centering based on intrinsic image ratio
+                double imgW0 = img.getImage().getWidth();
+                double imgH0 = img.getImage().getHeight();
+                double scale = Math.min(boxW / imgW0, boxH / imgH0);
+                double dispW = imgW0 * scale;
+                double dispH = imgH0 * scale;
+
+                double x = (getAppWidth() - dispW) / 2.0;
+                double y = (getAppHeight() - dispH) / 2.0;
+                img.setTranslateX(x);
+                img.setTranslateY(y);
+
+                // Add on top so it renders above default background; don't intercept mouse
+                img.setMouseTransparent(true);
+                menu.getContentRoot().getChildren().add(img);
+
+                return menu;
+            }
+        });
     }
 
     @Override
