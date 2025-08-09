@@ -300,8 +300,13 @@ public class LabyrinthApp extends GameApplication {
             }
         });
         subScene.setOnMouseExited(e -> { lastMouseX = Double.NaN; lastMouseY = Double.NaN; });
-        subScene.setOnMouseMoved(e -> handleMouse(e.getX(), e.getY()));
-        subScene.setOnMouseDragged(e -> handleMouse(e.getX(), e.getY()));
+        if(System.getProperty("os.name", "generic").toLowerCase().contains("mac")) {
+            subScene.setOnMouseMoved(e -> handleMouseMac(e.getX(), e.getY()));
+            subScene.setOnMouseDragged(e -> handleMouseMac(e.getX(), e.getY()));
+        } else {
+            subScene.setOnMouseMoved(e -> handleMouse(e.getX(), e.getY()));
+            subScene.setOnMouseDragged(e -> handleMouse(e.getX(), e.getY()));
+        }
 
         // UI hint
         var hint = FXGL.getUIFactoryService().newText("WASD to move, Q/E to turn. Mouse to look. Find the exit.", Color.WHITE, 18);
@@ -334,6 +339,59 @@ public class LabyrinthApp extends GameApplication {
                 fpControl.addPitch(-dy * mouseSensitivity); // invert Y for natural look
             }
             centerCursor();
+            return;
+        }
+
+        // Non-capture mode: use relative movement based on last mouse position
+        if (Double.isNaN(lastMouseX) || Double.isNaN(lastMouseY)) {
+            lastMouseX = x;
+            lastMouseY = y;
+            return;
+        }
+        double dx = x - lastMouseX;
+        double dy = y - lastMouseY;
+        lastMouseX = x;
+        lastMouseY = y;
+        if (fpControl != null) {
+            fpControl.addYaw(dx * mouseSensitivity);
+            fpControl.addPitch(-dy * mouseSensitivity); // invert Y for natural look
+        }
+    }
+
+    private void handleMouseMac(double x, double y) {
+        if (captureMouse) {
+            if (subScene3D == null) return;
+
+            if (isRecentering) {
+                // Synthetic event from Robot, ignore movement, update last known pos
+                isRecentering = false;
+                lastMouseX = x;
+                lastMouseY = y;
+                return;
+            }
+
+            // Standard relative mouse movement calculation
+            if (Double.isNaN(lastMouseX) || Double.isNaN(lastMouseY)) {
+                lastMouseX = x;
+                lastMouseY = y;
+                return;
+            }
+            double dx = x - lastMouseX;
+            double dy = y - lastMouseY;
+            lastMouseX = x;
+            lastMouseY = y;
+
+            if (fpControl != null) {
+                fpControl.addYaw(dx * mouseSensitivity);
+                fpControl.addPitch(-dy * mouseSensitivity); // invert Y for natural look
+            }
+
+            // Recenter cursor only if it's near the edge of the subscene
+            double margin = 10; // pixels from edge
+            if (x < margin || x > subScene3D.getWidth() - margin ||
+                    y < margin || y > subScene3D.getHeight() - margin) {
+                centerCursor();
+            }
             return;
         }
 

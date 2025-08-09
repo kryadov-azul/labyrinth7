@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "com.kayar.yetanotherlabyrinth"
-version = "1.0-SNAPSHOT"
+version = "1.0.1"
 
 repositories {
     mavenCentral()
@@ -14,9 +14,10 @@ repositories {
 
 // Select JavaFX platform classifier based on OS or -PjavafxPlatform=win|mac|linux
 val osName = System.getProperty("os.name").lowercase()
+val osArch = System.getProperty("os.arch").lowercase()
 val defaultJavafxPlatform = when {
     osName.contains("win") -> "win"
-    osName.contains("mac") || osName.contains("darwin") -> "mac"
+    osName.contains("mac") || osName.contains("darwin") -> if (osArch == "aarch64") "mac-aarch64" else "mac"
     else -> "linux"
 }
 val javafxPlatform: String = (findProperty("javafxPlatform") as String?) ?: defaultJavafxPlatform
