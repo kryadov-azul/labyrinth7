@@ -50,7 +50,7 @@ public class LabyrinthApp extends GameApplication {
 
     @Override
     protected void initSettings(GameSettings settings) {
-        settings.setTitle("Labyrinth 7");
+        settings.setTitle("-=Labyrinth=-");
         settings.setVersion("1.0");
         settings.setWidth(1280);
         settings.setHeight(720);
@@ -74,7 +74,8 @@ public class LabyrinthApp extends GameApplication {
         Group root3D = new Group();
 
         double floorThickness = 4;
-        PhongMaterial floorMat = new PhongMaterial(Color.DARKSLATEGRAY);
+        PhongMaterial floorMat = new PhongMaterial();
+        floorMat.setDiffuseMap(image("floor-1.png"));
         Box floor = new Box(worldW, floorThickness, worldH);
         floor.setMaterial(floorMat);
         floor.setTranslateX(worldW / 2.0);
@@ -86,14 +87,29 @@ public class LabyrinthApp extends GameApplication {
         root3D.getChildren().add(new AmbientLight(Color.color(0.6, 0.6, 0.6)));
 
         double wallHeight = TILE * 1.8;
-        PhongMaterial wallMat1 = new PhongMaterial(Color.DARKSLATEBLUE);
-        PhongMaterial wallMat2 = new PhongMaterial(Color.SLATEBLUE);
+
+        // Ceiling with sky texture
+        PhongMaterial skyMat = new PhongMaterial();
+        skyMat.setDiffuseMap(image("sky-3.png"));
+        double ceilingThickness = 4;
+        Box ceiling = new Box(worldW, ceilingThickness, worldH);
+        ceiling.setMaterial(skyMat);
+        ceiling.setTranslateX(worldW / 2.0);
+        ceiling.setTranslateY(-wallHeight);
+        ceiling.setTranslateZ(worldH / 2.0);
+        root3D.getChildren().add(ceiling);
+
+        // Wall materials
+        PhongMaterial wallMat1 = new PhongMaterial();
+        wallMat1.setDiffuseMap(image("wall-1.png"));
+        PhongMaterial wallMat2 = new PhongMaterial();
+        wallMat2.setDiffuseMap(image("wall-2.png"));
 
         for (int x = 0; x < W; x++) {
             for (int y = 0; y < H; y++) {
                 if (maze[x][y]) {
                     Box wall = new Box(TILE, wallHeight, TILE);
-                    wall.setMaterial(((x + y) % 2 == 0) ? wallMat1 : wallMat2);
+                    wall.setMaterial(currentLevel%2==0 ? wallMat1 : wallMat2);
                     wall.setTranslateX(x * TILE + TILE / 2.0);
                     wall.setTranslateY(-wallHeight / 2.0);
                     wall.setTranslateZ(y * TILE + TILE / 2.0);

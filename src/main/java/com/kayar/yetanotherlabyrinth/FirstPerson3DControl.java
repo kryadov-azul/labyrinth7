@@ -44,7 +44,7 @@ public class FirstPerson3DControl extends Component {
     private boolean turnRight;
 
     private long lastStepSound = 0;
-    private long stepIntervalMs = 350;
+    private long stepIntervalMs = 450;
 
     public FirstPerson3DControl(boolean[][] maze, int tile, PerspectiveCamera camera, Point2D spawn2D, Point2D exitCenter2D) {
         this.maze = maze;
@@ -52,7 +52,7 @@ public class FirstPerson3DControl extends Component {
         this.gridH = maze[0].length;
         this.tile = tile;
         this.radius = tile * 0.30;
-        this.cameraHeight = tile * 0.45;
+        this.cameraHeight = tile * 0.85;
         this.camera = camera;
 
         this.x = spawn2D.getX();
