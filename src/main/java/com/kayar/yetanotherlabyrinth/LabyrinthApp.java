@@ -20,6 +20,12 @@ import javafx.scene.robot.Robot;
 import javafx.application.Platform;
 import javafx.scene.media.Media;
 import javafx.scene.media.MediaPlayer;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
+import javafx.util.Duration;
+import javafx.scene.image.Image;
+import javafx.scene.image.PixelReader;
+import javafx.scene.image.WritableImage;
 
 import static com.almasb.fxgl.dsl.FXGL.*;
 
@@ -41,6 +47,12 @@ public class LabyrinthApp extends GameApplication {
 
     // Media player for main menu background music
     private MediaPlayer menuPlayer;
+
+    // Media player for in-game background music
+    private MediaPlayer gamePlayer;
+
+    // Timeline for exit animation
+    private Timeline exitAnim;
 
     private double lastMouseX = Double.NaN;
     private double lastMouseY = Double.NaN;
@@ -65,7 +77,8 @@ public class LabyrinthApp extends GameApplication {
 
     @Override
     protected void onPreInit() {
-        // Before game initialization, start menu music so it plays on main menu
+        // Before game initialization, ensure in-game music is stopped and start menu music
+        stopGameMusic();
         startMenuMusic();
     }
 
@@ -105,10 +118,54 @@ public class LabyrinthApp extends GameApplication {
         }
     }
 
+    private void startGameMusic() {
+        try {
+            if (gamePlayer != null) {
+                // already prepared/playing
+                return;
+            }
+            var url = getClass().getResource("/assets/sounds/in-game.mp3");
+            if (url == null) {
+                System.out.println("[DEBUG_LOG] In-game music resource not found: /assets/sounds/in-game.mp3");
+                return;
+            }
+            Media media = new Media(url.toExternalForm());
+            gamePlayer = new MediaPlayer(media);
+            gamePlayer.setCycleCount(MediaPlayer.INDEFINITE);
+            gamePlayer.setVolume(0.5);
+            gamePlayer.setOnError(() -> System.out.println("[DEBUG_LOG] Game MediaPlayer error: " + gamePlayer.getError()));
+            gamePlayer.play();
+            System.out.println("[DEBUG_LOG] In-game music started.");
+        } catch (Exception e) {
+            System.out.println("[DEBUG_LOG] Failed to start in-game music: " + e.getMessage());
+        }
+    }
+
+    private void stopGameMusic() {
+        try {
+            if (gamePlayer != null) {
+                gamePlayer.stop();
+                gamePlayer.dispose();
+                gamePlayer = null;
+                System.out.println("[DEBUG_LOG] In-game music stopped.");
+            }
+        } catch (Exception e) {
+            System.out.println("[DEBUG_LOG] Failed to stop in-game music: " + e.getMessage());
+        }
+    }
+
     @Override
     protected void initGame() {
         // Stop menu music if it's playing since we are starting the game now
         stopMenuMusic();
+        // Start in-game music
+        startGameMusic();
+
+        // Stop previous exit animation if any
+        if (exitAnim != null) {
+            try { exitAnim.stop(); } catch (Exception ignored) {}
+            exitAnim = null;
+        }
 
         // Prepare new level UI and state
         getGameScene().clearUINodes();
@@ -173,14 +230,36 @@ public class LabyrinthApp extends GameApplication {
             }
         }
 
-        // Exit marker
+        // Exit marker with animated texture
         int exitGX = W - 2;
         int exitGY = H - 2;
         Point2D exitCenter = cellCenter(exitGX, exitGY);
-        PhongMaterial exitMat = new PhongMaterial(Color.LIMEGREEN);
+
         double exitH = wallHeight * 0.6;
         Box exitBox = new Box(TILE * 0.8, exitH, TILE * 0.8);
+
+        // Load spritesheet and slice into 5 frames (40x40) horizontally
+        Image sheet = image("exit.png"); // From /assets/textures
+        int frameW = 32, frameH = 40, framesCount = 5;
+        PixelReader pr = sheet.getPixelReader();
+        WritableImage[] frames = new WritableImage[framesCount];
+        for (int i = 0; i < framesCount; i++) {
+            frames[i] = new WritableImage(pr, i * frameW, 0, frameW, frameH);
+        }
+        PhongMaterial exitMat = new PhongMaterial();
+        exitMat.setDiffuseMap(frames[0]);
+        exitMat.setSpecularColor(Color.WHITE);
         exitBox.setMaterial(exitMat);
+
+        // Animate frames with short delay to emulate animation
+        final int[] idx = {0};
+        exitAnim = new Timeline(new KeyFrame(Duration.millis(150), e2 -> {
+            idx[0] = (idx[0] + 1) % framesCount;
+            exitMat.setDiffuseMap(frames[idx[0]]);
+        }));
+        exitAnim.setCycleCount(Timeline.INDEFINITE);
+        exitAnim.play();
+
         exitBox.setTranslateX(exitCenter.getX());
         exitBox.setTranslateY(-exitH / 2.0);
         exitBox.setTranslateZ(exitCenter.getY());
