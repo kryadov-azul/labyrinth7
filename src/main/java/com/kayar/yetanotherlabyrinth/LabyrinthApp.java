@@ -16,6 +16,8 @@ import javafx.scene.shape.Box;
 import javafx.scene.AmbientLight;
 import javafx.scene.SceneAntialiasing;
 import javafx.scene.Cursor;
+import javafx.scene.robot.Robot;
+import javafx.application.Platform;
 
 import static com.almasb.fxgl.dsl.FXGL.*;
 
@@ -29,9 +31,18 @@ public class LabyrinthApp extends GameApplication {
     private FirstPerson3DControl fpControl;
     private PerspectiveCamera camera;
 
+    // Mouse capture state for pointer-lock behavior
+    private Robot robot;
+    private boolean captureMouse = true;
+    private boolean isRecentering = false;
+    private SubScene subScene3D;
+
     private double lastMouseX = Double.NaN;
     private double lastMouseY = Double.NaN;
     private final double mouseSensitivity = 0.2; // degrees per pixel (both axes)
+    
+    // Level counter for roguelike progression
+    private int currentLevel = 0;
 
     private Point2D cellCenter(int gx, int gy) {
         return new Point2D(gx * TILE + TILE / 2.0, gy * TILE + TILE / 2.0);
@@ -49,6 +60,10 @@ public class LabyrinthApp extends GameApplication {
 
     @Override
     protected void initGame() {
+        // Prepare new level UI and state
+        getGameScene().clearUINodes();
+        currentLevel++;
+
         // Generate maze
         maze = MazeGenerator.generate(W, H, 0);
 
@@ -112,6 +127,7 @@ public class LabyrinthApp extends GameApplication {
         subScene.setCursor(Cursor.NONE); // hide cursor for FPS feel
         subScene.setFocusTraversable(true);
         getGameScene().addUINode(subScene);
+        this.subScene3D = subScene;
 
         // Controller entity (no visual)
         Point2D spawn = cellCenter(1, 1);
@@ -123,9 +139,13 @@ public class LabyrinthApp extends GameApplication {
 
         // Mouse look: adjust yaw (X) and pitch (Y) based on mouse movement over the 3D subscene
         subScene.setOnMouseEntered(e -> {
-            lastMouseX = e.getX();
-            lastMouseY = e.getY();
             subScene.requestFocus();
+            if (captureMouse) {
+                centerCursor();
+            } else {
+                lastMouseX = e.getX();
+                lastMouseY = e.getY();
+            }
         });
         subScene.setOnMouseExited(e -> { lastMouseX = Double.NaN; lastMouseY = Double.NaN; });
         subScene.setOnMouseMoved(e -> handleMouse(e.getX(), e.getY()));
@@ -136,9 +156,36 @@ public class LabyrinthApp extends GameApplication {
         hint.setTranslateX(20);
         hint.setTranslateY(30);
         getGameScene().addUINode(hint);
+
+        // Display level start message and ensure focus
+        Platform.runLater(() -> {
+            getNotificationService().pushNotification("Level " + currentLevel + " - Find the exit!");
+            // Request focus to ensure input works after level load
+            getGameScene().getRoot().requestFocus();
+        });
     }
 
     private void handleMouse(double x, double y) {
+        if (captureMouse) {
+            if (subScene3D == null) return;
+            if (isRecentering) {
+                // Ignore the synthetic event caused by Robot.mouseMove
+                isRecentering = false;
+                return;
+            }
+            double centerX = subScene3D.getWidth() / 2.0;
+            double centerY = subScene3D.getHeight() / 2.0;
+            double dx = x - centerX;
+            double dy = y - centerY;
+            if (fpControl != null) {
+                fpControl.addYaw(dx * mouseSensitivity);
+                fpControl.addPitch(-dy * mouseSensitivity); // invert Y for natural look
+            }
+            centerCursor();
+            return;
+        }
+
+        // Non-capture mode: use relative movement based on last mouse position
         if (Double.isNaN(lastMouseX) || Double.isNaN(lastMouseY)) {
             lastMouseX = x;
             lastMouseY = y;
@@ -151,6 +198,26 @@ public class LabyrinthApp extends GameApplication {
         if (fpControl != null) {
             fpControl.addYaw(dx * mouseSensitivity);
             fpControl.addPitch(-dy * mouseSensitivity); // invert Y for natural look
+        }
+    }
+
+    private void centerCursor() {
+        if (subScene3D == null) return;
+        if (robot == null) {
+            try {
+                robot = new Robot();
+            } catch (Exception ex) {
+                // If Robot is not available, disable capture mode gracefully
+                captureMouse = false;
+                return;
+            }
+        }
+        double centerX = subScene3D.getWidth() / 2.0;
+        double centerY = subScene3D.getHeight() / 2.0;
+        javafx.geometry.Point2D p = subScene3D.localToScreen(centerX, centerY);
+        if (p != null) {
+            isRecentering = true;
+            robot.mouseMove(p.getX(), p.getY());
         }
     }
 
