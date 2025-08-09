@@ -18,6 +18,8 @@ import javafx.scene.SceneAntialiasing;
 import javafx.scene.Cursor;
 import javafx.scene.robot.Robot;
 import javafx.application.Platform;
+import javafx.scene.media.Media;
+import javafx.scene.media.MediaPlayer;
 
 import static com.almasb.fxgl.dsl.FXGL.*;
 
@@ -37,6 +39,9 @@ public class LabyrinthApp extends GameApplication {
     private boolean isRecentering = false;
     private SubScene subScene3D;
 
+    // Media player for main menu background music
+    private MediaPlayer menuPlayer;
+
     private double lastMouseX = Double.NaN;
     private double lastMouseY = Double.NaN;
     private final double mouseSensitivity = 0.2; // degrees per pixel (both axes)
@@ -50,7 +55,7 @@ public class LabyrinthApp extends GameApplication {
 
     @Override
     protected void initSettings(GameSettings settings) {
-        settings.setTitle("-=Labyrinth=-");
+        settings.setTitle("-=Yet Another Labyrinth=-");
         settings.setVersion("1.0");
         settings.setWidth(1280);
         settings.setHeight(720);
@@ -59,7 +64,52 @@ public class LabyrinthApp extends GameApplication {
     }
 
     @Override
+    protected void onPreInit() {
+        // Before game initialization, start menu music so it plays on main menu
+        startMenuMusic();
+    }
+
+    private void startMenuMusic() {
+        try {
+            if (menuPlayer != null) {
+                // already prepared/playing
+                return;
+            }
+            var url = getClass().getResource("/assets/sounds/menu.mp3");
+            if (url == null) {
+                System.out.println("[DEBUG_LOG] Menu music resource not found: /assets/sounds/menu.mp3");
+                return;
+            }
+            Media media = new Media(url.toExternalForm());
+            menuPlayer = new MediaPlayer(media);
+            menuPlayer.setCycleCount(MediaPlayer.INDEFINITE);
+            menuPlayer.setVolume(0.5);
+            menuPlayer.setOnError(() -> System.out.println("[DEBUG_LOG] Menu MediaPlayer error: " + menuPlayer.getError()));
+            menuPlayer.play();
+            System.out.println("[DEBUG_LOG] Menu music started.");
+        } catch (Exception e) {
+            System.out.println("[DEBUG_LOG] Failed to start menu music: " + e.getMessage());
+        }
+    }
+
+    private void stopMenuMusic() {
+        try {
+            if (menuPlayer != null) {
+                menuPlayer.stop();
+                menuPlayer.dispose();
+                menuPlayer = null;
+                System.out.println("[DEBUG_LOG] Menu music stopped.");
+            }
+        } catch (Exception e) {
+            System.out.println("[DEBUG_LOG] Failed to stop menu music: " + e.getMessage());
+        }
+    }
+
+    @Override
     protected void initGame() {
+        // Stop menu music if it's playing since we are starting the game now
+        stopMenuMusic();
+
         // Prepare new level UI and state
         getGameScene().clearUINodes();
         currentLevel++;
