@@ -74,7 +74,7 @@ public class PlayerControl extends Component {
 
         // Win condition: reach the exit center within radius
         if (center.distance(exitCenter) < Math.max(radius, tile * 0.45)) {
-            FXGL.getDialogService().showMessageBox("You found the exit!", () -> FXGL.getGameController().startNewGame());
+            FXGL.getDialogService().showMessageBox(LabyrinthApp.buildExitMessage(), () -> FXGL.getGameController().startNewGame());
         }
     }
 

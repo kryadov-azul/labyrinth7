@@ -31,6 +31,12 @@ import static com.almasb.fxgl.dsl.FXGL.*;
 
 public class LabyrinthApp extends GameApplication {
 
+    private static LabyrinthApp instance;
+
+    public LabyrinthApp() {
+        instance = this;
+    }
+
     private static final int TILE = 64;
     private static final int W = 11; // must be odd
     private static final int H = 11; // must be odd
@@ -60,6 +66,8 @@ public class LabyrinthApp extends GameApplication {
     
     // Level counter for roguelike progression
     private int currentLevel = 0;
+    // Timestamp when current level started
+    private long levelStartMillis = 0;
 
     private Point2D cellCenter(int gx, int gy) {
         return new Point2D(gx * TILE + TILE / 2.0, gy * TILE + TILE / 2.0);
@@ -172,6 +180,7 @@ public class LabyrinthApp extends GameApplication {
         // Prepare new level UI and state
         getGameScene().clearUINodes();
         currentLevel++;
+        levelStartMillis = System.currentTimeMillis();
 
         // Compute labyrinth size for this level: starting at 10x10 blocks, +2 each level
         int blocks = 4 + 2 * (currentLevel - 1);
@@ -214,16 +223,20 @@ public class LabyrinthApp extends GameApplication {
         root3D.getChildren().add(ceiling);
 
         // Wall materials
-        PhongMaterial wallMat1 = new PhongMaterial();
-        wallMat1.setDiffuseMap(image("wall-1.png"));
-        PhongMaterial wallMat2 = new PhongMaterial();
-        wallMat2.setDiffuseMap(image("wall-2.png"));
+        String[] wallTextures = {"wall-1.png", "wall-2.png", "wall-3.png"};
+        PhongMaterial[] wallMats = new PhongMaterial[wallTextures.length];
+        for (int i = 0; i < wallMats.length; i++) {
+            wallMats[i] = new PhongMaterial();
+            wallMats[i].setDiffuseMap(image(wallTextures[i]));
+        }
+        int wallIndex = (currentLevel-1) % wallMats.length;
 
+        var thisLevelWall = wallMats[wallIndex];
         for (int x = 0; x < W; x++) {
             for (int y = 0; y < H; y++) {
                 if (maze[x][y]) {
                     Box wall = new Box(TILE, wallHeight, TILE);
-                    wall.setMaterial(currentLevel%2==0 ? wallMat1 : wallMat2);
+                    wall.setMaterial(thisLevelWall);
                     wall.setTranslateX(x * TILE + TILE / 2.0);
                     wall.setTranslateY(-wallHeight / 2.0);
                     wall.setTranslateZ(y * TILE + TILE / 2.0);
@@ -463,6 +476,18 @@ public class LabyrinthApp extends GameApplication {
             @Override public void onActionBegin() { fpControl.setTurnRight(true); }
             @Override public void onActionEnd() { fpControl.setTurnRight(false); }
         }, KeyCode.E);
+    }
+
+    public static String buildExitMessage() {
+        LabyrinthApp app = instance;
+        int level = (app != null) ? app.currentLevel : 0;
+        long millis = (app != null) ? (System.currentTimeMillis() - app.levelStartMillis) : 0;
+        if (millis < 0) millis = 0;
+        long totalSeconds = millis / 1000;
+        long minutes = totalSeconds / 60;
+        long seconds = totalSeconds % 60;
+        String timeStr = String.format("%02d:%02d", minutes, seconds);
+        return "Level " + level + " completed!\nTime: " + timeStr;
     }
 
     public static void main(String[] args) {

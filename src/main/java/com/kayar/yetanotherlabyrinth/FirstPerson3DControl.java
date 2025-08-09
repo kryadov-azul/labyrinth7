@@ -111,7 +111,7 @@ public class FirstPerson3DControl extends Component {
         double dx = x - exitX;
         double dz = z - exitZ;
         if (dx * dx + dz * dz <= (tile * 0.5) * (tile * 0.5)) {
-            FXGL.getDialogService().showMessageBox("You found the exit!", () -> FXGL.getGameController().startNewGame());
+            FXGL.getDialogService().showMessageBox(LabyrinthApp.buildExitMessage(), () -> FXGL.getGameController().startNewGame());
         }
     }
 
