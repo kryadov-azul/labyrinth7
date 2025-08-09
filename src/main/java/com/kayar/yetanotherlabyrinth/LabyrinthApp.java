@@ -73,6 +73,8 @@ public class LabyrinthApp extends GameApplication {
         settings.setHeight(720);
         settings.setMainMenuEnabled(true);
         settings.setGameMenuEnabled(true);
+        // Allow fullscreen toggle from FXGL settings menu
+        settings.setFullScreenAllowed(true);
     }
 
     @Override
