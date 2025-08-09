@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "com.kayar.yetanotherlabyrinth"
-version = "1.0.1"
+version = "1.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
