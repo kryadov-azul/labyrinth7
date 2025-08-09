@@ -24,8 +24,8 @@ import static com.almasb.fxgl.dsl.FXGL.*;
 public class LabyrinthApp extends GameApplication {
 
     private static final int TILE = 64;
-    private static final int W = 31; // must be odd
-    private static final int H = 31; // must be odd
+    private static final int W = 11; // must be odd
+    private static final int H = 11; // must be odd
 
     private boolean[][] maze;
     private FirstPerson3DControl fpControl;
@@ -63,6 +63,11 @@ public class LabyrinthApp extends GameApplication {
         // Prepare new level UI and state
         getGameScene().clearUINodes();
         currentLevel++;
+
+        // Compute labyrinth size for this level: starting at 10x10 blocks, +2 each level
+        int blocks = 4 + 2 * (currentLevel - 1);
+        int W = blocks * 2 + 1; // generator grid must be odd
+        int H = blocks * 2 + 1;
 
         // Generate maze
         maze = MazeGenerator.generate(W, H, 0);
