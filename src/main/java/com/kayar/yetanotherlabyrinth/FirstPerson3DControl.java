@@ -208,6 +208,7 @@ public class FirstPerson3DControl extends Component {
         if (grounded) {
             yVelocity = jumpSpeed;
             grounded = false;
+            FXGL.play("jump1.mp3");
         }
     }
 
