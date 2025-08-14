@@ -112,7 +112,7 @@ public class LabyrinthApp extends GameApplication {
         settings.setSceneFactory(new SceneFactory() {
             @Override
             public FXGLMenu newMainMenu() {
-                currentLevel = 0;
+                LabyrinthApp.resetLevelCounter();
                 //
                 FXGLMenu menu = baseFactory.newMainMenu();
 
@@ -141,6 +141,13 @@ public class LabyrinthApp extends GameApplication {
                 // Add on top so it renders above default background; don't intercept mouse
                 img.setMouseTransparent(true);
                 menu.getContentRoot().getChildren().add(img);
+
+                // Ensure level is reset whenever main menu is shown (not only on creation)
+                menu.getContentRoot().sceneProperty().addListener((obs, oldScene, newScene) -> {
+                    if (newScene != null) {
+                        LabyrinthApp.resetLevelCounter();
+                    }
+                });
 
                 return menu;
             }

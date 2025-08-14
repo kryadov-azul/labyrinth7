@@ -229,10 +229,11 @@ public class FirstPerson3DControl extends Component {
             for (int gz = minGZ; gz <= maxGZ; gz++) {
                 if (gx < 0 || gz < 0 || gx >= gridW || gz >= gridH) continue; // ignore outside
                 if (pits[gx][gz]) {
-                    double tileCenterX = gx * tile + tile / 2.0;
-                    double tileCenterZ = gz * tile + tile / 2.0;
-                    double nearestX = clamp(px, tileCenterX - tile / 2.0, tileCenterX + tile / 2.0);
-                    double nearestZ = clamp(pz, tileCenterZ - tile / 2.0, tileCenterZ + tile / 2.0);
+                    double v = 2.0;
+                    double tileCenterX = gx * tile + tile / v;
+                    double tileCenterZ = gz * tile + tile / v;
+                    double nearestX = clamp(px, tileCenterX - tile / v, tileCenterX + tile / v);
+                    double nearestZ = clamp(pz, tileCenterZ - tile / v, tileCenterZ + tile / v);
                     double dx = px - nearestX;
                     double dz = pz - nearestZ;
                     if (dx * dx + dz * dz <= radius * radius)
