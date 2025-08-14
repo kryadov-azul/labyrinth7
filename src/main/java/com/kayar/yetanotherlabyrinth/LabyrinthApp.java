@@ -360,7 +360,7 @@ public class LabyrinthApp extends GameApplication {
         root3D.getChildren().add(ceiling);
 
         // Wall materials
-        String[] wallTextures = {"wall-1.png", "wall-2.png", "wall-3.png"};
+        String[] wallTextures = {"wall-1.png", "wall-2.png", "wall-3.png", "wall-4.png", "wall-5.png"};
         PhongMaterial[] wallMats = new PhongMaterial[wallTextures.length];
         for (int i = 0; i < wallMats.length; i++) {
             wallMats[i] = new PhongMaterial();
