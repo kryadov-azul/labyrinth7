@@ -405,7 +405,7 @@ public class LabyrinthApp extends GameApplication {
 
         // Display level start message and ensure focus
         Platform.runLater(() -> {
-            getNotificationService().pushNotification("Level " + currentLevel + " - Find the exit!");
+            getNotificationService().pushNotification("Level " + currentLevel + ": " + alg);
             // Request focus to ensure input works after level load
             getGameScene().getRoot().requestFocus();
         });
