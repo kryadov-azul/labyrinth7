@@ -1,5 +1,6 @@
 package com.kayar.yetanotherlabyrinth;
 
+import com.almasb.fxgl.audio.Sound;
 import com.almasb.fxgl.dsl.FXGL;
 import com.almasb.fxgl.entity.component.Component;
 import javafx.geometry.Point2D;
@@ -15,6 +16,7 @@ import javafx.scene.PerspectiveCamera;
 public class FirstPerson3DControl extends Component {
 
     private final boolean[][] maze; // [w][h] true = wall
+    private final boolean[][] pits; // [w][h] true = pit (hole) on walkable cell
     private final int gridW;
     private final int gridH;
     private final int tile;
@@ -43,6 +45,10 @@ public class FirstPerson3DControl extends Component {
     private final double gravity;    // units/s^2 (acts downward)
     private final double jumpSpeed;  // initial upward speed
 
+    // pits logic
+    private final double safeJumpHeightFactor = 0.45; // must be higher than this fraction of tile to clear a pit
+    private boolean gameOverTriggered = false;
+
     // inputs
     private boolean moveForward;
     private boolean moveBackward;
@@ -53,9 +59,11 @@ public class FirstPerson3DControl extends Component {
 
     private long lastStepSound = 0;
     private long stepIntervalMs = 450;
+    private final Sound jumpSfx;
 
-    public FirstPerson3DControl(boolean[][] maze, int tile, PerspectiveCamera camera, Point2D spawn2D, Point2D exitCenter2D) {
+    public FirstPerson3DControl(boolean[][] maze, boolean[][] pits, int tile, PerspectiveCamera camera, Point2D spawn2D, Point2D exitCenter2D) {
         this.maze = maze;
+        this.pits = pits;
         this.gridW = maze.length;
         this.gridH = maze[0].length;
         this.tile = tile;
@@ -71,8 +79,9 @@ public class FirstPerson3DControl extends Component {
         this.exitZ = exitCenter2D.getY();
 
         // set jump constants relative to tile size
-        this.gravity = tile * 9.0;      // tuned for feel, not real gravity
+        this.gravity = tile * 7.0;      // tuned for feel, not real gravity
         this.jumpSpeed = tile * 3.2;    // enough to clear small bumps, below ceiling
+        this.jumpSfx = FXGL.getAssetLoader().loadSound("jump1.mp3");
     }
 
     @Override
@@ -91,10 +100,22 @@ public class FirstPerson3DControl extends Component {
 
         double vx = 0;
         double vz = 0;
-        if (moveForward) { vx -= fwdX; vz -= fwdZ; }
-        if (moveBackward) { vx += fwdX; vz += fwdZ; }
-        if (moveLeft) { vx -= rightX; vz -= rightZ; }
-        if (moveRight) { vx += rightX; vz += rightZ; }
+        if (moveForward) {
+            vx -= fwdX;
+            vz -= fwdZ;
+        }
+        if (moveBackward) {
+            vx += fwdX;
+            vz += fwdZ;
+        }
+        if (moveLeft) {
+            vx -= rightX;
+            vz -= rightZ;
+        }
+        if (moveRight) {
+            vx += rightX;
+            vz += rightZ;
+        }
 
         boolean moving = false;
         if (Math.hypot(vx, vz) > 1e-6) {
@@ -142,6 +163,20 @@ public class FirstPerson3DControl extends Component {
 
         if (moving) maybePlayStep();
 
+        // pit detection: if overlapping pit and not high enough, trigger game over
+        // Allow jumping over pits: do not trigger while ascending (yVelocity > 0)
+        if (!gameOverTriggered && isOnPit(x, z)) {
+            double safeH = tile * safeJumpHeightFactor;
+            if (yVelocity <= 0 && yOffset < safeH) {
+                gameOverTriggered = true;
+                FXGL.getDialogService().showMessageBox("You fell into a pit! Game Over", () -> {
+                    LabyrinthApp.resetLevelCounter();
+                    FXGL.getGameController().gotoMainMenu();
+                });
+                return;
+            }
+        }
+
         // win detection based on XZ distance to exit
         double dx = x - exitX;
         double dz = z - exitZ;
@@ -183,6 +218,31 @@ public class FirstPerson3DControl extends Component {
         return false;
     }
 
+    private boolean isOnPit(double px, double pz) {
+        if (pits == null) return false;
+        int minGX = (int) Math.floor((px - radius) / tile);
+        int maxGX = (int) Math.floor((px + radius) / tile);
+        int minGZ = (int) Math.floor((pz - radius) / tile);
+        int maxGZ = (int) Math.floor((pz + radius) / tile);
+
+        for (int gx = minGX; gx <= maxGX; gx++) {
+            for (int gz = minGZ; gz <= maxGZ; gz++) {
+                if (gx < 0 || gz < 0 || gx >= gridW || gz >= gridH) continue; // ignore outside
+                if (pits[gx][gz]) {
+                    double tileCenterX = gx * tile + tile / 2.0;
+                    double tileCenterZ = gz * tile + tile / 2.0;
+                    double nearestX = clamp(px, tileCenterX - tile / 2.0, tileCenterX + tile / 2.0);
+                    double nearestZ = clamp(pz, tileCenterZ - tile / 2.0, tileCenterZ + tile / 2.0);
+                    double dx = px - nearestX;
+                    double dz = pz - nearestZ;
+                    if (dx * dx + dz * dz <= radius * radius)
+                        return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private void maybePlayStep() {
         long now = System.currentTimeMillis();
         if (now - lastStepSound >= stepIntervalMs) {
@@ -196,27 +256,54 @@ public class FirstPerson3DControl extends Component {
     }
 
     // Input toggles
-    public void setMoveForward(boolean v) { this.moveForward = v; }
-    public void setMoveBackward(boolean v) { this.moveBackward = v; }
-    public void setMoveLeft(boolean v) { this.moveLeft = v; }
-    public void setMoveRight(boolean v) { this.moveRight = v; }
-    public void setTurnLeft(boolean v) { this.turnLeft = v; }
-    public void setTurnRight(boolean v) { this.turnRight = v; }
+    public void setMoveForward(boolean v) {
+        this.moveForward = v;
+    }
+
+    public void setMoveBackward(boolean v) {
+        this.moveBackward = v;
+    }
+
+    public void setMoveLeft(boolean v) {
+        this.moveLeft = v;
+    }
+
+    public void setMoveRight(boolean v) {
+        this.moveRight = v;
+    }
+
+    public void setTurnLeft(boolean v) {
+        this.turnLeft = v;
+    }
+
+    public void setTurnRight(boolean v) {
+        this.turnRight = v;
+    }
 
     // Actions
     public void jump() {
         if (grounded) {
             yVelocity = jumpSpeed;
             grounded = false;
-            FXGL.play("jump1.mp3");
+            FXGL.getAudioPlayer().playSound(jumpSfx);
         }
     }
 
     // Mouse look support (adjust yaw/pitch by given delta in degrees)
-    public void addYaw(double deltaDegrees) { this.yaw += deltaDegrees; }
-    public void addPitch(double deltaDegrees) { this.pitch += deltaDegrees; }
+    public void addYaw(double deltaDegrees) {
+        this.yaw += deltaDegrees;
+    }
+
+    public void addPitch(double deltaDegrees) {
+        this.pitch += deltaDegrees;
+    }
 
     // Getters for minimap
-    public double getX() { return x; }
-    public double getZ() { return z; }
+    public double getX() {
+        return x;
+    }
+
+    public double getZ() {
+        return z;
+    }
 }

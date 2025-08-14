@@ -50,6 +50,7 @@ public class LabyrinthApp extends GameApplication {
     private static final int H = 11; // must be odd
 
     private boolean[][] maze;
+    private boolean[][] pits;
     private FirstPerson3DControl fpControl;
     private PerspectiveCamera camera;
 
@@ -111,6 +112,8 @@ public class LabyrinthApp extends GameApplication {
         settings.setSceneFactory(new SceneFactory() {
             @Override
             public FXGLMenu newMainMenu() {
+                currentLevel = 0;
+                //
                 FXGLMenu menu = baseFactory.newMainMenu();
 
                 // Load our image from /assets/textures and center it
@@ -263,6 +266,41 @@ public class LabyrinthApp extends GameApplication {
         this.gridW = W;
         this.gridH = H;
 
+        // Generate pits on walkable cells (exclude spawn and exit)
+        pits = new boolean[W][H];
+        double pitChance = Math.min(0.06 + (currentLevel - 1) * 0.01, 0.12); // scale slightly with level
+        pitChance *= 0.5; // decrease counts of pits by half
+        int spawnGX = 1, spawnGY = 1;
+        int exitGXLocal = W - 2, exitGYLocal = H - 2;
+        for (int x = 0; x < W; x++) {
+            for (int y = 0; y < H; y++) {
+                if (maze[x][y]) continue; // no pits in walls
+
+                // Exclude spawn, exit and the other two walkable corner cells of the labyrinth
+                boolean isCornerCell = (x == 1 && y == 1) || (x == W - 2 && y == H - 2) ||
+                        (x == W - 2 && y == 1) || (x == 1 && y == H - 2);
+                if (isCornerCell) continue;
+
+                if (Math.random() < pitChance) {
+                    boolean nearby = false;
+                    for (int dx = -1; dx <= 1 && !nearby; dx++) {
+                        for (int dy = -1; dy <= 1 && !nearby; dy++) {
+                            if (dx == 0 && dy == 0) continue;
+                            int nx = x + dx;
+                            int ny = y + dy;
+                            if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+                            if (pits[nx][ny]) {
+                                nearby = true; // prevent pits from being placed near each other (8-neighborhood)
+                            }
+                        }
+                    }
+                    if (!nearby) {
+                        pits[x][y] = true;
+                    }
+                }
+            }
+        }
+
         int worldW = W * TILE;
         int worldH = H * TILE;
 
@@ -278,6 +316,32 @@ public class LabyrinthApp extends GameApplication {
         floor.setTranslateY(0);
         floor.setTranslateZ(worldH / 2.0);
         root3D.getChildren().add(floor);
+
+        // Add pit overlays on the floor with random textures (pit1 or pit2)
+        if (pits != null) {
+            PhongMaterial pitMat1 = new PhongMaterial();
+            pitMat1.setDiffuseMap(image("pit1.png"));
+            PhongMaterial pitMat2 = new PhongMaterial();
+            pitMat2.setDiffuseMap(image("pit2.png"));
+
+            double overlayH = 0.2; // very thin so it looks like drawn on the floor
+            double epsilon = 0.02; // avoid z-fighting by moving slightly above floor top (negative Y is up)
+            double overlayY = -floorThickness / 2.0 - overlayH / 2.0 - epsilon;
+
+            for (int x = 0; x < W; x++) {
+                for (int y = 0; y < H; y++) {
+                    if (!maze[x][y] && pits[x][y]) {
+                        Box pitOverlay = new Box(TILE, overlayH, TILE);
+                        // choose random texture for this pit
+                        pitOverlay.setMaterial(Math.random() < 0.5 ? pitMat1 : pitMat2);
+                        pitOverlay.setTranslateX(x * TILE + TILE / 2.0);
+                        pitOverlay.setTranslateY(overlayY);
+                        pitOverlay.setTranslateZ(y * TILE + TILE / 2.0);
+                        root3D.getChildren().add(pitOverlay);
+                    }
+                }
+            }
+        }
 
         // Ambient light
         root3D.getChildren().add(new AmbientLight(Color.color(0.6, 0.6, 0.6)));
@@ -369,7 +433,7 @@ public class LabyrinthApp extends GameApplication {
 
         // Controller entity (no visual)
         Point2D spawn = cellCenter(1, 1);
-        fpControl = new FirstPerson3DControl(maze, TILE, camera, spawn, exitCenter);
+        fpControl = new FirstPerson3DControl(maze, pits, TILE, camera, spawn, exitCenter);
         entityBuilder()
                 .type(EntityType.PLAYER)
                 .with(fpControl)
@@ -395,7 +459,7 @@ public class LabyrinthApp extends GameApplication {
         }
 
         // UI hint
-        var hint = FXGL.getUIFactoryService().newText("WASD to move, Q/E to turn, Space to jump. Mouse to look. Find the exit.", Color.WHITE, 18);
+        var hint = FXGL.getUIFactoryService().newText("WASD to move, Q/E to turn, Space to jump. Mouse to look. Avoid pits: jump over or fall! Find the exit.", Color.WHITE, 18);
         hint.setTranslateX(20);
         hint.setTranslateY(30);
         getGameScene().addUINode(hint);
@@ -445,6 +509,17 @@ public class LabyrinthApp extends GameApplication {
                 for (int y = 0; y < gridH; y++) {
                     if (maze[x][y]) {
                         gs.fillRect(x * cellPx, y * cellPx, cellPx, cellPx);
+                    }
+                }
+            }
+            // draw pits on walkable tiles
+            if (pits != null) {
+                gs.setFill(Color.DARKRED);
+                for (int x = 0; x < gridW; x++) {
+                    for (int y = 0; y < gridH; y++) {
+                        if (!maze[x][y] && pits[x][y]) {
+                            gs.fillRect(x * cellPx, y * cellPx, cellPx, cellPx);
+                        }
                     }
                 }
             }
@@ -645,6 +720,13 @@ public class LabyrinthApp extends GameApplication {
         long seconds = totalSeconds % 60;
         String timeStr = String.format("%02d:%02d", minutes, seconds);
         return "Level " + level + " completed!\nTime: " + timeStr;
+    }
+
+    public static void resetLevelCounter() {
+        if (instance != null) {
+            instance.currentLevel = 0;
+            instance.levelStartMillis = 0;
+        }
     }
 
     public static void main(String[] args) {
