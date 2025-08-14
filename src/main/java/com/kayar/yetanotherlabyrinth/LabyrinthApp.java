@@ -246,8 +246,19 @@ public class LabyrinthApp extends GameApplication {
         int W = blocks * 2 + 1; // generator grid must be odd
         int H = blocks * 2 + 1;
 
+        // Select maze algorithm rotating each level
+        MazeGenerator.Algorithm[] algOrder = new MazeGenerator.Algorithm[] {
+                MazeGenerator.Algorithm.BACKTRACKER,
+                MazeGenerator.Algorithm.WILSON,
+                MazeGenerator.Algorithm.KRUSKAL,
+                MazeGenerator.Algorithm.PRIM,
+                MazeGenerator.Algorithm.ALDOUS_BRODER,
+                MazeGenerator.Algorithm.ELLER
+        };
+        MazeGenerator.Algorithm alg = algOrder[(currentLevel - 1) % algOrder.length];
+        System.out.println("[DEBUG_LOG] Generating maze with algorithm: " + alg + " for level " + currentLevel);
         // Generate maze
-        maze = MazeGenerator.generate(W, H, 0);
+        maze = MazeGenerator.generate(W, H, 0, alg);
         // store grid size for minimap
         this.gridW = W;
         this.gridH = H;
