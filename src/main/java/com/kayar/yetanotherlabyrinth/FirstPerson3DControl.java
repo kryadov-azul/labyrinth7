@@ -171,4 +171,8 @@ public class FirstPerson3DControl extends Component {
     // Mouse look support (adjust yaw/pitch by given delta in degrees)
     public void addYaw(double deltaDegrees) { this.yaw += deltaDegrees; }
     public void addPitch(double deltaDegrees) { this.pitch += deltaDegrees; }
+
+    // Getters for minimap
+    public double getX() { return x; }
+    public double getZ() { return z; }
 }

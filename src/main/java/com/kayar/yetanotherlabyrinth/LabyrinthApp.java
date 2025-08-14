@@ -32,6 +32,8 @@ import javafx.scene.image.Image;
 import javafx.scene.image.PixelReader;
 import javafx.scene.image.WritableImage;
 import javafx.scene.layout.StackPane;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
 
 import static com.almasb.fxgl.dsl.FXGL.*;
 
@@ -56,6 +58,18 @@ public class LabyrinthApp extends GameApplication {
     private boolean captureMouse = true;
     private boolean isRecentering = false;
     private SubScene subScene3D;
+
+    // Minimap
+    private Canvas minimapStatic;
+    private Canvas minimapOverlay;
+    private StackPane minimapNode;
+    private int gridW;
+    private int gridH;
+    private double cellPx;
+    private double minimapW;
+    private double minimapH;
+    private int exitGX;
+    private int exitGY;
 
     // Media player for main menu background music
     private MediaPlayer menuPlayer;
@@ -89,6 +103,8 @@ public class LabyrinthApp extends GameApplication {
         settings.setGameMenuEnabled(true);
         // Allow fullscreen toggle from FXGL settings menu
         settings.setFullScreenAllowed(true);
+        // Start in full screen so window size equals screen size
+        settings.setFullScreenFromStart(true);
 
         // Customize main menu to add centered background image
         final SceneFactory baseFactory = new SceneFactory();
@@ -232,6 +248,9 @@ public class LabyrinthApp extends GameApplication {
 
         // Generate maze
         maze = MazeGenerator.generate(W, H, 0);
+        // store grid size for minimap
+        this.gridW = W;
+        this.gridH = H;
 
         int worldW = W * TILE;
         int worldH = H * TILE;
@@ -289,9 +308,9 @@ public class LabyrinthApp extends GameApplication {
         }
 
         // Exit marker with animated texture
-        int exitGX = W - 2;
-        int exitGY = H - 2;
-        Point2D exitCenter = cellCenter(exitGX, exitGY);
+        this.exitGX = W - 2;
+        this.exitGY = H - 2;
+        Point2D exitCenter = cellCenter(this.exitGX, this.exitGY);
 
         double exitH = wallHeight * 0.6;
         Box exitBox = new Box(TILE * 0.8, exitH, TILE * 0.8);
@@ -370,12 +389,91 @@ public class LabyrinthApp extends GameApplication {
         hint.setTranslateY(30);
         getGameScene().addUINode(hint);
 
+        // Build minimap overlay
+        buildMinimap();
+
         // Display level start message and ensure focus
         Platform.runLater(() -> {
             getNotificationService().pushNotification("Level " + currentLevel + " - Find the exit!");
             // Request focus to ensure input works after level load
             getGameScene().getRoot().requestFocus();
         });
+    }
+
+    private void buildMinimap() {
+        try {
+            // Remove previous minimap if exists
+            if (minimapNode != null) {
+                getGameScene().removeUINode(minimapNode);
+                minimapNode = null;
+            }
+
+            if (maze == null || gridW <= 0 || gridH <= 0) return;
+
+            double screenArea = getAppWidth() * getAppHeight();
+            double maxArea = screenArea / 48.0; // must not exceed 1/12 of screen
+            // Derive pixels per cell from area constraint
+            cellPx = Math.sqrt(Math.max(1.0, maxArea) / (gridW * gridH));
+            // Avoid too tiny rendering
+            if (cellPx < 1.0) cellPx = 1.0;
+
+            minimapW = gridW * cellPx;
+            minimapH = gridH * cellPx;
+
+            minimapStatic = new Canvas(minimapW, minimapH);
+            minimapOverlay = new Canvas(minimapW, minimapH);
+
+            // Draw static background and walls
+            GraphicsContext gs = minimapStatic.getGraphicsContext2D();
+            gs.setFill(Color.color(0, 0, 0, 0.45));
+            gs.fillRect(0, 0, minimapW, minimapH);
+
+            // draw walls
+            gs.setFill(Color.LIGHTGRAY);
+            for (int x = 0; x < gridW; x++) {
+                for (int y = 0; y < gridH; y++) {
+                    if (maze[x][y]) {
+                        gs.fillRect(x * cellPx, y * cellPx, cellPx, cellPx);
+                    }
+                }
+            }
+            // Highlight exit cell
+            if (exitGX >= 0 && exitGY >= 0) {
+                gs.setFill(Color.LIMEGREEN);
+                gs.fillRect(exitGX * cellPx, exitGY * cellPx, cellPx, cellPx);
+            }
+            // Border
+            gs.setStroke(Color.color(1,1,1,0.8));
+            gs.setLineWidth(Math.max(1.0, cellPx * 0.08));
+            gs.strokeRect(0.5, 0.5, minimapW - 1, minimapH - 1);
+
+            minimapNode = new StackPane(minimapStatic, minimapOverlay);
+            minimapNode.setMouseTransparent(true);
+            minimapNode.setPickOnBounds(false);
+
+            double margin = 10;
+            minimapNode.setTranslateX(getAppWidth() - minimapW - margin);
+            minimapNode.setTranslateY(margin);
+
+            getGameScene().addUINode(minimapNode);
+        } catch (Exception ex) {
+            System.out.println("[DEBUG_LOG] Failed to build minimap: " + ex.getMessage());
+        }
+    }
+
+    @Override
+    protected void onUpdate(double tpf) {
+        // Draw dynamic player marker on the minimap
+        if (minimapOverlay == null || fpControl == null) return;
+        GraphicsContext go = minimapOverlay.getGraphicsContext2D();
+        go.clearRect(0, 0, minimapOverlay.getWidth(), minimapOverlay.getHeight());
+
+        double px = (fpControl.getX() / TILE) * cellPx;
+        double py = (fpControl.getZ() / TILE) * cellPx;
+        double r = Math.max(2.0, cellPx * 0.35);
+
+        go.setFill(Color.RED);
+        go.fillOval(px - r/2.0, py - r/2.0, r, r);
     }
 
     private void handleMouse(double x, double y) {
