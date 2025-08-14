@@ -395,7 +395,7 @@ public class LabyrinthApp extends GameApplication {
         }
 
         // UI hint
-        var hint = FXGL.getUIFactoryService().newText("WASD to move, Q/E to turn. Mouse to look. Find the exit.", Color.WHITE, 18);
+        var hint = FXGL.getUIFactoryService().newText("WASD to move, Q/E to turn, Space to jump. Mouse to look. Find the exit.", Color.WHITE, 18);
         hint.setTranslateX(20);
         hint.setTranslateY(30);
         getGameScene().addUINode(hint);
@@ -628,6 +628,11 @@ public class LabyrinthApp extends GameApplication {
             @Override public void onActionBegin() { fpControl.setTurnRight(true); }
             @Override public void onActionEnd() { fpControl.setTurnRight(false); }
         }, KeyCode.E);
+
+        // Jump
+        getInput().addAction(new UserAction("Jump") {
+            @Override public void onActionBegin() { if (fpControl != null) fpControl.jump(); }
+        }, KeyCode.SPACE);
     }
 
     public static String buildExitMessage() {

@@ -8,6 +8,7 @@ import javafx.scene.PerspectiveCamera;
 /**
  * First-person 3D controller using the maze grid for collision on XZ plane.
  * - Movement: WASD (forward/back/strafe), Q/E to turn left/right (yaw).
+ * - Space to jump (simple vertical motion with gravity and ceiling clamp).
  * - Plays footstep sounds while moving.
  * - Triggers win when close to exit (by XZ distance).
  */
@@ -35,6 +36,13 @@ public class FirstPerson3DControl extends Component {
     private double yaw; // degrees, 0 means facing +Z
     private double pitch; // degrees, 0 means level; positive = look up
 
+    // vertical motion (jump)
+    private double yOffset = 0;      // positive => camera is higher than ground eye level
+    private double yVelocity = 0;    // positive => moving up
+    private boolean grounded = true; // on the floor
+    private final double gravity;    // units/s^2 (acts downward)
+    private final double jumpSpeed;  // initial upward speed
+
     // inputs
     private boolean moveForward;
     private boolean moveBackward;
@@ -61,6 +69,10 @@ public class FirstPerson3DControl extends Component {
 
         this.exitX = exitCenter2D.getX();
         this.exitZ = exitCenter2D.getY();
+
+        // set jump constants relative to tile size
+        this.gravity = tile * 9.0;      // tuned for feel, not real gravity
+        this.jumpSpeed = tile * 3.2;    // enough to clear small bumps, below ceiling
     }
 
     @Override
@@ -96,9 +108,32 @@ public class FirstPerson3DControl extends Component {
         if (Math.abs(vx) > 1e-9) tryMove(vx, 0);
         if (Math.abs(vz) > 1e-9) tryMove(0, vz);
 
+        // vertical motion (apply gravity and clamp to ceiling)
+        // ceiling height approx: wallHeight - cameraHeight; wallHeight ~= tile * 1.8
+        double maxHeadroom = Math.max(0, tile * 1.8 - cameraHeight - 4); // small margin
+        if (!grounded || yVelocity != 0) {
+            yVelocity -= gravity * tpf; // gravity pulls down
+            yOffset += yVelocity * tpf;
+
+            // ceiling clamp
+            if (yOffset > maxHeadroom) {
+                yOffset = maxHeadroom;
+                if (yVelocity > 0) yVelocity = 0;
+            }
+
+            // floor collision
+            if (yOffset <= 0) {
+                yOffset = 0;
+                yVelocity = 0;
+                grounded = true;
+            } else {
+                grounded = false;
+            }
+        }
+
         // update camera transform (yaw + pitch)
         camera.setTranslateX(x);
-        camera.setTranslateY(-cameraHeight); // negative Y so that floor at 0 is "below"
+        camera.setTranslateY(-cameraHeight - yOffset); // negative Y so that floor at 0 is "below"
         camera.setTranslateZ(z);
         camera.getTransforms().setAll(
                 new javafx.scene.transform.Rotate(yaw, javafx.scene.transform.Rotate.Y_AXIS),
@@ -167,6 +202,14 @@ public class FirstPerson3DControl extends Component {
     public void setMoveRight(boolean v) { this.moveRight = v; }
     public void setTurnLeft(boolean v) { this.turnLeft = v; }
     public void setTurnRight(boolean v) { this.turnRight = v; }
+
+    // Actions
+    public void jump() {
+        if (grounded) {
+            yVelocity = jumpSpeed;
+            grounded = false;
+        }
+    }
 
     // Mouse look support (adjust yaw/pitch by given delta in degrees)
     public void addYaw(double deltaDegrees) { this.yaw += deltaDegrees; }
