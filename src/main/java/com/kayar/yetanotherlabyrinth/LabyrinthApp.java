@@ -39,6 +39,7 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.CheckBox;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
+import org.jetbrains.annotations.NotNull;
 
 import static com.almasb.fxgl.dsl.FXGL.*;
 
@@ -47,7 +48,7 @@ public class LabyrinthApp extends GameApplication {
     private static LabyrinthApp instance;
 
     // Gameplay options
-    private final BooleanProperty showMinimap = new SimpleBooleanProperty(true);
+    private final BooleanProperty showMinimap = new SimpleBooleanProperty(false);
     private boolean minimapListenerInstalled = false;
 
     public LabyrinthApp() {
@@ -108,7 +109,7 @@ public class LabyrinthApp extends GameApplication {
     private double lastMouseX = Double.NaN;
     private double lastMouseY = Double.NaN;
     private final double mouseSensitivity = 0.2; // degrees per pixel (both axes)
-    
+
     // Level counter for roguelike progression
     private int currentLevel = 0;
     // Timestamp when current level started
@@ -118,8 +119,8 @@ public class LabyrinthApp extends GameApplication {
     private int playerHealth = 100; // percent
     private boolean playerDead = false;
     private Canvas healthBarCanvas;
-    private double healthBarWidth = 300;
-    private double healthBarHeight = 10;
+    private double healthBarWidth = 14;
+    private double healthBarHeight = 240;
 
     private Point2D cellCenter(int gx, int gy) {
         return new Point2D(gx * TILE + TILE / 2.0, gy * TILE + TILE / 2.0);
@@ -185,6 +186,7 @@ public class LabyrinthApp extends GameApplication {
                 return menu;
             }
 
+            @NotNull
             @Override
             public FXGLMenu newGameMenu() {
                 FXGLMenu menu = baseFactory.newGameMenu();
@@ -196,13 +198,15 @@ public class LabyrinthApp extends GameApplication {
                 cbMinimap.selectedProperty().bindBidirectional(showMinimap);
 
                 // Place it near top-left of the game menu content
-                cbMinimap.setTranslateX(40);
-                cbMinimap.setTranslateY(220);
+//                cbMinimap.setTranslateX(40);
+//                cbMinimap.setTranslateY(220);
 
                 addControlToGameMenu(menu, cbMinimap);
+
                 return menu;
             }
         });
+
     }
 
     @Override
@@ -907,6 +911,18 @@ public class LabyrinthApp extends GameApplication {
         getInput().addAction(new UserAction("Jump") {
             @Override public void onActionBegin() { if (fpControl != null) fpControl.jump(); }
         }, KeyCode.SPACE);
+        getInput().addAction(new UserAction("Toggle Minimap") {
+            @Override
+            protected void onActionBegin() {
+                boolean enabled = showMinimap.get();
+                showMinimap.set(!enabled);
+                if (enabled) {
+                    removeMinimap();
+                } else {
+                    buildMinimap();
+                }
+            }
+        }, KeyCode.TAB);
     }
 
     // ---- Health System ----
@@ -919,8 +935,9 @@ public class LabyrinthApp extends GameApplication {
         healthBarCanvas = new Canvas(healthBarWidth, healthBarHeight);
         healthBarCanvas.setMouseTransparent(true);
         double margin = 20;
-        healthBarCanvas.setTranslateX((getAppWidth() - healthBarWidth) / 2.0);
-        healthBarCanvas.setTranslateY(getAppHeight() - healthBarHeight - margin);
+        // Переносим к левому краю и выравниваем по вертикальному центру
+        healthBarCanvas.setTranslateX(margin);
+        healthBarCanvas.setTranslateY((getAppHeight() - healthBarHeight) / 2.0);
         getGameScene().addUINode(healthBarCanvas);
     }
 
@@ -930,21 +947,25 @@ public class LabyrinthApp extends GameApplication {
         double w = healthBarWidth;
         double h = healthBarHeight;
         g.clearRect(0, 0, w, h);
-        // background
+        // фон
         g.setFill(Color.color(0, 0, 0, 0.55));
-        g.fillRoundRect(0, 0, w, h, h, h);
-        // red fill proportional to health
+        // скругления под вертикальную ориентацию — радиус по ширине
+        double r = w;
+        g.fillRoundRect(0, 0, w, h, r, r);
+
+        // красная заливка снизу вверх пропорционально здоровью
         double p = Math.max(0, Math.min(100, playerHealth)) / 100.0;
-        double fw = w * p;
+        double fh = h * p;
         g.setFill(Color.DARKRED);
         g.setStroke(Color.DARKVIOLET);
         g.setFontSmoothingType(FontSmoothingType.LCD);
         g.setGlobalAlpha(0.8);
-        g.fillRoundRect(0, 0, fw, h, h, h);
-        // border
+        g.fillRoundRect(0, h - fh, w, fh, r, r);
+
+        // рамка
         g.setStroke(Color.color(1, 1, 1, 0.85));
         g.setLineWidth(2);
-        g.strokeRoundRect(1, 1, w - 2, h - 2, h, h);
+        g.strokeRoundRect(1, 1, w - 2, h - 2, r, r);
     }
 
     public void damagePlayer(int amount) {
