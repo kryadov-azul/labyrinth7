@@ -32,6 +32,13 @@ public class FirstPerson3DControl extends Component {
     private final double exitX;
     private final double exitZ;
 
+    // key logic
+    private final double keyX;
+    private final double keyZ;
+    private boolean hasKey = false;
+    private boolean keyActive = true;
+    private long lastExitMsgMs = 0;
+
     // position and orientation (degrees)
     private double x;
     private double z;
@@ -61,7 +68,7 @@ public class FirstPerson3DControl extends Component {
     private long stepIntervalMs = 450;
     private final Sound jumpSfx;
 
-    public FirstPerson3DControl(boolean[][] maze, boolean[][] pits, int tile, PerspectiveCamera camera, Point2D spawn2D, Point2D exitCenter2D) {
+    public FirstPerson3DControl(boolean[][] maze, boolean[][] pits, int tile, PerspectiveCamera camera, Point2D spawn2D, Point2D exitCenter2D, Point2D keyCenter2D) {
         this.maze = maze;
         this.pits = pits;
         this.gridW = maze.length;
@@ -77,6 +84,15 @@ public class FirstPerson3DControl extends Component {
 
         this.exitX = exitCenter2D.getX();
         this.exitZ = exitCenter2D.getY();
+        if (keyCenter2D != null) {
+            this.keyX = keyCenter2D.getX();
+            this.keyZ = keyCenter2D.getY();
+            this.keyActive = true;
+        } else {
+            this.keyX = 0;
+            this.keyZ = 0;
+            this.keyActive = false;
+        }
 
         // set jump constants relative to tile size
         this.gravity = tile * 7.0;      // tuned for feel, not real gravity
@@ -177,11 +193,31 @@ public class FirstPerson3DControl extends Component {
             }
         }
 
-        // win detection based on XZ distance to exit
+        // key pickup detection
+        if (keyActive) {
+            double kdx = x - keyX;
+            double kdz = z - keyZ;
+            if (kdx * kdx + kdz * kdz <= (tile * 0.5) * (tile * 0.5)) {
+                keyActive = false;
+                hasKey = true;
+                FXGL.getNotificationService().pushNotification("You found a key!");
+                LabyrinthApp.getInstance().onKeyPicked();
+            }
+        }
+
+        // win detection based on XZ distance to exit, gated by key possession
         double dx = x - exitX;
         double dz = z - exitZ;
         if (dx * dx + dz * dz <= (tile * 0.5) * (tile * 0.5)) {
-            FXGL.getDialogService().showMessageBox(LabyrinthApp.buildExitMessage(), () -> FXGL.getGameController().startNewGame());
+            if (!hasKey) {
+                long now = System.currentTimeMillis();
+                if (now - lastExitMsgMs > 1500) {
+                    lastExitMsgMs = now;
+                    FXGL.getNotificationService().pushNotification("The exit is locked. Find the key!");
+                }
+            } else {
+                FXGL.getDialogService().showMessageBox(LabyrinthApp.buildExitMessage(), () -> FXGL.getGameController().startNewGame());
+            }
         }
     }
 

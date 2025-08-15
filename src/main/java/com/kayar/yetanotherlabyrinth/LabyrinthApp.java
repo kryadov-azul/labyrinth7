@@ -31,6 +31,7 @@ import javafx.util.Duration;
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelReader;
 import javafx.scene.image.WritableImage;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.StackPane;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
@@ -43,6 +44,10 @@ public class LabyrinthApp extends GameApplication {
 
     public LabyrinthApp() {
         instance = this;
+    }
+
+    public static LabyrinthApp getInstance() {
+        return instance;
     }
 
     private static final int TILE = 64;
@@ -72,6 +77,15 @@ public class LabyrinthApp extends GameApplication {
     private int exitGX;
     private int exitGY;
 
+    // Key state
+    private int keyGX = -1;
+    private int keyGY = -1;
+    private boolean keyTaken = false;
+    private int keyFrameIndex = 0;
+    private Box keyBox3D;
+    private ImageView keyIconView;
+    private Image keyFrameImage;
+
     // Media player for main menu background music
     private MediaPlayer menuPlayer;
 
@@ -80,6 +94,8 @@ public class LabyrinthApp extends GameApplication {
 
     // Timeline for exit animation
     private Timeline exitAnim;
+    // Timeline for key bobbing animation
+    private Timeline keyHoverAnim;
 
     private double lastMouseX = Double.NaN;
     private double lastMouseY = Double.NaN;
@@ -146,6 +162,8 @@ public class LabyrinthApp extends GameApplication {
                 menu.getContentRoot().sceneProperty().addListener((obs, oldScene, newScene) -> {
                     if (newScene != null) {
                         LabyrinthApp.resetLevelCounter();
+                        stopGameMusic();
+                        startMenuMusic();
                     }
                 });
 
@@ -244,6 +262,11 @@ public class LabyrinthApp extends GameApplication {
         if (exitAnim != null) {
             try { exitAnim.stop(); } catch (Exception ignored) {}
             exitAnim = null;
+        }
+        // Stop previous key hover animation if any
+        if (keyHoverAnim != null) {
+            try { keyHoverAnim.stop(); } catch (Exception ignored) {}
+            keyHoverAnim = null;
         }
 
         // Prepare new level UI and state
@@ -424,6 +447,61 @@ public class LabyrinthApp extends GameApplication {
         exitBox.setTranslateZ(exitCenter.getY());
         root3D.getChildren().add(exitBox);
 
+        // Key placement and rendering
+        keyTaken = false;
+        keyBox3D = null;
+        keyIconView = null;
+        keyFrameIndex = (currentLevel - 1) % 4;
+        Image keySheet = image("keys.png");
+        PixelReader kpr = keySheet.getPixelReader();
+        int kFrameW = 32, kFrameH = 32;
+        keyFrameImage = new WritableImage(kpr, keyFrameIndex * kFrameW, 0, kFrameW, kFrameH);
+
+        // pick a random walkable, non-pit tile that isn't spawn or exit or other corners
+        java.util.List<int[]> candidates = new java.util.ArrayList<>();
+        for (int gx = 0; gx < W; gx++) {
+            for (int gy = 0; gy < H; gy++) {
+                if (maze[gx][gy]) continue; // wall
+                if (pits[gx][gy]) continue; // avoid pits
+                boolean isCorner = (gx == 1 && gy == 1) || (gx == W-2 && gy == H-2) || (gx == W-2 && gy == 1) || (gx == 1 && gy == H-2);
+                if (isCorner) continue;
+                if ((gx == 1 && gy == 1) || (gx == exitGX && gy == exitGY)) continue;
+                candidates.add(new int[]{gx, gy});
+            }
+        }
+        if (!candidates.isEmpty()) {
+            int idxC = (int) Math.floor(Math.random() * candidates.size());
+            int[] pick = candidates.get(idxC);
+            keyGX = pick[0];
+            keyGY = pick[1];
+            Point2D keyCenter = cellCenter(keyGX, keyGY);
+
+            // Create an upright key billboard and position it mid-air with bobbing animation
+            double keyW = TILE * 0.7;
+            double keyH = TILE * 0.7;
+            double keyD = TILE * 0.12;
+            keyBox3D = new Box(keyW, keyH, keyD);
+            PhongMaterial keyMat = new PhongMaterial();
+            keyMat.setDiffuseMap(keyFrameImage);
+            keyBox3D.setMaterial(keyMat);
+            keyBox3D.setTranslateX(keyCenter.getX());
+            double baseY = -(TILE * 1.8) / 2.0; // halfway between floor (0) and ceiling (-wallHeight)
+            keyBox3D.setTranslateY(baseY);
+            keyBox3D.setTranslateZ(keyCenter.getY());
+            root3D.getChildren().add(keyBox3D);
+
+            double amp = TILE * 0.12; // gentle bobbing amplitude
+            keyHoverAnim = new Timeline(
+                    new KeyFrame(Duration.ZERO, new javafx.animation.KeyValue(keyBox3D.translateYProperty(), baseY - amp)),
+                    new KeyFrame(Duration.seconds(1.6), new javafx.animation.KeyValue(keyBox3D.translateYProperty(), baseY + amp))
+            );
+            keyHoverAnim.setAutoReverse(true);
+            keyHoverAnim.setCycleCount(Timeline.INDEFINITE);
+            keyHoverAnim.play();
+        } else {
+            keyGX = -1; keyGY = -1;
+        }
+
         // Camera and 3D subscene
         camera = new PerspectiveCamera(true);
         camera.setNearClip(0.1);
@@ -440,7 +518,8 @@ public class LabyrinthApp extends GameApplication {
 
         // Controller entity (no visual)
         Point2D spawn = cellCenter(1, 1);
-        fpControl = new FirstPerson3DControl(maze, pits, TILE, camera, spawn, exitCenter);
+        Point2D keyCenterAll = (keyGX >= 0 ? cellCenter(keyGX, keyGY) : null);
+        fpControl = new FirstPerson3DControl(maze, pits, TILE, camera, spawn, exitCenter, keyCenterAll);
         entityBuilder()
                 .type(EntityType.PLAYER)
                 .with(fpControl)
@@ -556,10 +635,16 @@ public class LabyrinthApp extends GameApplication {
 
     @Override
     protected void onUpdate(double tpf) {
-        // Draw dynamic player marker on the minimap
+        // Draw dynamic markers on the minimap
         if (minimapOverlay == null || fpControl == null) return;
         GraphicsContext go = minimapOverlay.getGraphicsContext2D();
         go.clearRect(0, 0, minimapOverlay.getWidth(), minimapOverlay.getHeight());
+
+        // draw key marker if not yet taken
+        if (!keyTaken && keyGX >= 0 && keyGY >= 0) {
+            go.setFill(Color.BLUE);
+            go.fillRect(keyGX * cellPx, keyGY * cellPx, cellPx, cellPx);
+        }
 
         double px = (fpControl.getX() / TILE) * cellPx;
         double py = (fpControl.getZ() / TILE) * cellPx;
@@ -567,6 +652,35 @@ public class LabyrinthApp extends GameApplication {
 
         go.setFill(Color.RED);
         go.fillOval(px - r/2.0, py - r/2.0, r, r);
+    }
+
+    public void onKeyPicked() {
+        keyTaken = true;
+        // Stop key hover animation before removing the node
+        try {
+            if (keyHoverAnim != null) {
+                keyHoverAnim.stop();
+                keyHoverAnim = null;
+            }
+        } catch (Exception ignored) { }
+        try {
+            if (keyBox3D != null) {
+                if (keyBox3D.getParent() instanceof Group) {
+                    ((Group) keyBox3D.getParent()).getChildren().remove(keyBox3D);
+                }
+                keyBox3D = null;
+            }
+        } catch (Exception ignored) { }
+
+        if (keyIconView == null && keyFrameImage != null) {
+            keyIconView = new ImageView(keyFrameImage);
+            keyIconView.setFitWidth(32);
+            keyIconView.setFitHeight(32);
+            double margin = 10;
+            keyIconView.setTranslateX(margin);
+            keyIconView.setTranslateY(getAppHeight() - keyIconView.getFitHeight() - margin);
+            getGameScene().addUINode(keyIconView);
+        }
     }
 
     private void handleMouse(double x, double y) {
