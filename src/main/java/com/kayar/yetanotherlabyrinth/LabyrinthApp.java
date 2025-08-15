@@ -27,6 +27,7 @@ import javafx.scene.media.Media;
 import javafx.scene.media.MediaPlayer;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
+import javafx.scene.text.FontSmoothingType;
 import javafx.util.Duration;
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelReader;
@@ -105,6 +106,13 @@ public class LabyrinthApp extends GameApplication {
     private int currentLevel = 0;
     // Timestamp when current level started
     private long levelStartMillis = 0;
+
+    // Player health system
+    private int playerHealth = 100; // percent
+    private boolean playerDead = false;
+    private Canvas healthBarCanvas;
+    private double healthBarWidth = 300;
+    private double healthBarHeight = 10;
 
     private Point2D cellCenter(int gx, int gy) {
         return new Point2D(gx * TILE + TILE / 2.0, gy * TILE + TILE / 2.0);
@@ -556,6 +564,12 @@ public class LabyrinthApp extends GameApplication {
         hint.setTranslateY(30);
         getGameScene().addUINode(hint);
 
+        // Init health system
+        playerDead = false;
+        playerHealth = 100;
+        initHealthUI();
+        drawHealthBar();
+
         // Build minimap overlay
         buildMinimap();
 
@@ -845,6 +859,67 @@ public class LabyrinthApp extends GameApplication {
         getInput().addAction(new UserAction("Jump") {
             @Override public void onActionBegin() { if (fpControl != null) fpControl.jump(); }
         }, KeyCode.SPACE);
+    }
+
+    // ---- Health System ----
+    private void initHealthUI() {
+        try {
+            if (healthBarCanvas != null) {
+                getGameScene().removeUINode(healthBarCanvas);
+            }
+        } catch (Exception ignored) { }
+        healthBarCanvas = new Canvas(healthBarWidth, healthBarHeight);
+        healthBarCanvas.setMouseTransparent(true);
+        double margin = 20;
+        healthBarCanvas.setTranslateX((getAppWidth() - healthBarWidth) / 2.0);
+        healthBarCanvas.setTranslateY(getAppHeight() - healthBarHeight - margin);
+        getGameScene().addUINode(healthBarCanvas);
+    }
+
+    private void drawHealthBar() {
+        if (healthBarCanvas == null) return;
+        GraphicsContext g = healthBarCanvas.getGraphicsContext2D();
+        double w = healthBarWidth;
+        double h = healthBarHeight;
+        g.clearRect(0, 0, w, h);
+        // background
+        g.setFill(Color.color(0, 0, 0, 0.55));
+        g.fillRoundRect(0, 0, w, h, h, h);
+        // red fill proportional to health
+        double p = Math.max(0, Math.min(100, playerHealth)) / 100.0;
+        double fw = w * p;
+        g.setFill(Color.DARKRED);
+        g.setStroke(Color.DARKVIOLET);
+        g.setFontSmoothingType(FontSmoothingType.LCD);
+        g.setGlobalAlpha(0.8);
+        g.fillRoundRect(0, 0, fw, h, h, h);
+        // border
+        g.setStroke(Color.color(1, 1, 1, 0.85));
+        g.setLineWidth(2);
+        g.strokeRoundRect(1, 1, w - 2, h - 2, h, h);
+    }
+
+    public void damagePlayer(int amount) {
+        if (playerDead) return;
+        if (amount < 0) amount = 0;
+        playerHealth = Math.max(0, playerHealth - amount);
+        drawHealthBar();
+        if (playerHealth <= 0) {
+            onPlayerDeath();
+        }
+    }
+
+    public boolean isPlayerDead() {
+        return playerDead;
+    }
+
+    public void onPlayerDeath() {
+        if (playerDead) return;
+        playerDead = true;
+        getDialogService().showMessageBox("Game Over", () -> {
+            LabyrinthApp.resetLevelCounter();
+            getGameController().gotoMainMenu();
+        });
     }
 
     public static String buildExitMessage() {

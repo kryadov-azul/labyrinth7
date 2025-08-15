@@ -55,6 +55,7 @@ public class FirstPerson3DControl extends Component {
     // pits logic
     private final double safeJumpHeightFactor = 0.45; // must be higher than this fraction of tile to clear a pit
     private boolean gameOverTriggered = false;
+    private double pitTimeAccum = 0.0; // seconds accumulated while in damaging pit state
 
     // inputs
     private boolean moveForward;
@@ -179,17 +180,27 @@ public class FirstPerson3DControl extends Component {
 
         if (moving) maybePlayStep();
 
-        // pit detection: if overlapping pit and not high enough, trigger game over
-        // Allow jumping over pits: do not trigger while ascending (yVelocity > 0)
-        if (!gameOverTriggered && isOnPit(x, z)) {
+        // Pit damage over time: if overlapping pit and not high enough, apply damage every 300ms
+        // Allow jumping over pits: do not damage while ascending (yVelocity > 0)
+        if (!gameOverTriggered) {
+            boolean pit = isOnPit(x, z);
             double safeH = tile * safeJumpHeightFactor;
-            if (yVelocity <= 0 && yOffset < safeH) {
-                gameOverTriggered = true;
-                FXGL.getDialogService().showMessageBox("You fell into a pit! Game Over", () -> {
-                    LabyrinthApp.resetLevelCounter();
-                    FXGL.getGameController().gotoMainMenu();
-                });
-                return;
+            boolean damaging = pit && (yVelocity <= 0) && (yOffset < safeH);
+            if (damaging) {
+                pitTimeAccum += tpf;
+                // every 0.3 seconds apply 10 damage
+                while (pitTimeAccum >= 0.3 && !gameOverTriggered) {
+                    pitTimeAccum -= 0.3;
+                    LabyrinthApp app = LabyrinthApp.getInstance();
+                    if (app != null) {
+                        app.damagePlayer(10);
+                        if (app.isPlayerDead()) {
+                            gameOverTriggered = true;
+                        }
+                    }
+                }
+            } else {
+                pitTimeAccum = 0.0;
             }
         }
 
