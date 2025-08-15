@@ -86,7 +86,6 @@ public class PlayerControl extends Component {
     private void maybePlayStep() {
         long now = System.currentTimeMillis();
         if (now - lastStepSound >= stepIntervalMs) {
-            FXGL.play("walk.wav");
             lastStepSound = now;
         }
     }

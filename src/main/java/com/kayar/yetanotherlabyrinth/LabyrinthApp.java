@@ -36,12 +36,19 @@ import javafx.scene.image.ImageView;
 import javafx.scene.layout.StackPane;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.control.CheckBox;
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 
 import static com.almasb.fxgl.dsl.FXGL.*;
 
 public class LabyrinthApp extends GameApplication {
 
     private static LabyrinthApp instance;
+
+    // Gameplay options
+    private final BooleanProperty showMinimap = new SimpleBooleanProperty(true);
+    private boolean minimapListenerInstalled = false;
 
     public LabyrinthApp() {
         instance = this;
@@ -175,6 +182,24 @@ public class LabyrinthApp extends GameApplication {
                     }
                 });
 
+                return menu;
+            }
+
+            @Override
+            public FXGLMenu newGameMenu() {
+                FXGLMenu menu = baseFactory.newGameMenu();
+
+                CheckBox cbMinimap = new CheckBox("Show minimap");
+                cbMinimap.setSelected(showMinimap.get());
+                cbMinimap.setTextFill(Color.WHITE);
+                // Bind both ways so changes reflect in UI and logic
+                cbMinimap.selectedProperty().bindBidirectional(showMinimap);
+
+                // Place it near top-left of the game menu content
+                cbMinimap.setTranslateX(40);
+                cbMinimap.setTranslateY(220);
+
+                addControlToGameMenu(menu, cbMinimap);
                 return menu;
             }
         });
@@ -571,7 +596,19 @@ public class LabyrinthApp extends GameApplication {
         drawHealthBar();
 
         // Build minimap overlay
-        buildMinimap();
+        if (!minimapListenerInstalled) {
+            showMinimap.addListener((obs, wasShown, isShown) -> {
+                if (isShown != null && isShown) {
+                    buildMinimap();
+                } else {
+                    removeMinimap();
+                }
+            });
+            minimapListenerInstalled = true;
+        }
+        if (showMinimap.get()) {
+            buildMinimap();
+        }
 
         // Display level start message and ensure focus
         Platform.runLater(() -> {
@@ -651,6 +688,17 @@ public class LabyrinthApp extends GameApplication {
         } catch (Exception ex) {
             System.out.println("[DEBUG_LOG] Failed to build minimap: " + ex.getMessage());
         }
+    }
+
+    private void removeMinimap() {
+        try {
+            if (minimapNode != null) {
+                getGameScene().removeUINode(minimapNode);
+            }
+        } catch (Exception ignored) {}
+        minimapNode = null;
+        minimapOverlay = null;
+        minimapStatic = null;
     }
 
     @Override
@@ -939,6 +987,51 @@ public class LabyrinthApp extends GameApplication {
             instance.currentLevel = 0;
             instance.levelStartMillis = 0;
         }
+    }
+
+    private void addControlToGameMenu(com.almasb.fxgl.app.scene.FXGLMenu menu, javafx.scene.Node node) {
+        // Try attaching to the dedicated menu content root if available (varies across FXGL versions)
+        try {
+            java.lang.reflect.Method m = menu.getClass().getMethod("getMenuContentRoot");
+            Object root = m.invoke(menu);
+            if (root instanceof javafx.scene.Parent) {
+                javafx.scene.Parent parent = (javafx.scene.Parent) root;
+                if (parent instanceof javafx.scene.layout.Pane) {
+                    ((javafx.scene.layout.Pane) parent).getChildren().add(node);
+                    return;
+                } else if (parent instanceof javafx.scene.Group) {
+                    ((javafx.scene.Group) parent).getChildren().add(node);
+                    return;
+                }
+            }
+        } catch (Exception ignored) { }
+        // Try older/different API name
+        try {
+            java.lang.reflect.Method m2 = menu.getClass().getMethod("getMenuContent");
+            Object root2 = m2.invoke(menu);
+            if (root2 instanceof javafx.scene.Parent) {
+                javafx.scene.Parent parent = (javafx.scene.Parent) root2;
+                if (parent instanceof javafx.scene.layout.Pane) {
+                    ((javafx.scene.layout.Pane) parent).getChildren().add(node);
+                    return;
+                } else if (parent instanceof javafx.scene.Group) {
+                    ((javafx.scene.Group) parent).getChildren().add(node);
+                    return;
+                }
+            } else if (root2 instanceof javafx.scene.Node) {
+                // If it's some node, fallback to main root to ensure visibility
+                Platform.runLater(() -> {
+                    menu.getContentRoot().getChildren().add(node);
+                    node.toFront();
+                });
+                return;
+            }
+        } catch (Exception ignored) { }
+        // Fallback: add to main root on next pulse so it stays on top of framework's layers
+        Platform.runLater(() -> {
+            menu.getContentRoot().getChildren().add(node);
+            node.toFront();
+        });
     }
 
     public static void main(String[] args) {

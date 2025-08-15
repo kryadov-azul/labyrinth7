@@ -68,6 +68,8 @@ public class FirstPerson3DControl extends Component {
     private long lastStepSound = 0;
     private long stepIntervalMs = 450;
     private final Sound jumpSfx;
+    private final Sound walkSfx;
+
 
     public FirstPerson3DControl(boolean[][] maze, boolean[][] pits, int tile, PerspectiveCamera camera, Point2D spawn2D, Point2D exitCenter2D, Point2D keyCenter2D) {
         this.maze = maze;
@@ -99,6 +101,7 @@ public class FirstPerson3DControl extends Component {
         this.gravity = tile * 7.0;      // tuned for feel, not real gravity
         this.jumpSpeed = tile * 3.2;    // enough to clear small bumps, below ceiling
         this.jumpSfx = FXGL.getAssetLoader().loadSound("jump1.mp3");
+        this.walkSfx = FXGL.getAssetLoader().loadSound("walk-2.mp3");
     }
 
     @Override
@@ -294,7 +297,7 @@ public class FirstPerson3DControl extends Component {
     private void maybePlayStep() {
         long now = System.currentTimeMillis();
         if (now - lastStepSound >= stepIntervalMs) {
-            FXGL.play("walk.wav");
+            FXGL.getAudioPlayer().playSound(walkSfx);
             lastStepSound = now;
         }
     }
