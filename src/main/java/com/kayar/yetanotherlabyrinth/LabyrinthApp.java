@@ -339,7 +339,11 @@ public class LabyrinthApp extends GameApplication {
 
         double floorThickness = 4;
         PhongMaterial floorMat = new PhongMaterial();
-        floorMat.setDiffuseMap(image("floor-1.png"));
+        if (currentLevel % 2 == 1) {
+            floorMat.setDiffuseMap(image("floor-1.png"));
+        } else {
+            floorMat.setDiffuseMap(image("floor-2.png"));
+        }
         Box floor = new Box(worldW, floorThickness, worldH);
         floor.setMaterial(floorMat);
         floor.setTranslateX(worldW / 2.0);
@@ -485,12 +489,14 @@ public class LabyrinthApp extends GameApplication {
             keyMat.setDiffuseMap(keyFrameImage);
             keyBox3D.setMaterial(keyMat);
             keyBox3D.setTranslateX(keyCenter.getX());
-            double baseY = -(TILE * 1.8) / 2.0; // halfway between floor (0) and ceiling (-wallHeight)
+            // Place key near the floor and keep gentle bobbing without intersecting the floor
+            double floorTopY = -floorThickness / 2.0;
+            double baseY = floorTopY - TILE * 0.48; // a bit above the floor
             keyBox3D.setTranslateY(baseY);
             keyBox3D.setTranslateZ(keyCenter.getY());
             root3D.getChildren().add(keyBox3D);
 
-            double amp = TILE * 0.12; // gentle bobbing amplitude
+            double amp = TILE * 0.04; // smaller amplitude to stay above the floor
             keyHoverAnim = new Timeline(
                     new KeyFrame(Duration.ZERO, new javafx.animation.KeyValue(keyBox3D.translateYProperty(), baseY - amp)),
                     new KeyFrame(Duration.seconds(1.6), new javafx.animation.KeyValue(keyBox3D.translateYProperty(), baseY + amp))
@@ -635,23 +641,33 @@ public class LabyrinthApp extends GameApplication {
 
     @Override
     protected void onUpdate(double tpf) {
-        // Draw dynamic markers on the minimap
-        if (minimapOverlay == null || fpControl == null) return;
-        GraphicsContext go = minimapOverlay.getGraphicsContext2D();
-        go.clearRect(0, 0, minimapOverlay.getWidth(), minimapOverlay.getHeight());
-
-        // draw key marker if not yet taken
-        if (!keyTaken && keyGX >= 0 && keyGY >= 0) {
-            go.setFill(Color.BLUE);
-            go.fillRect(keyGX * cellPx, keyGY * cellPx, cellPx, cellPx);
+        // Make the key billboard always face the player (camera)
+        if (keyBox3D != null && camera != null) {
+            double dx = camera.getTranslateX() - keyBox3D.getTranslateX();
+            double dz = camera.getTranslateZ() - keyBox3D.getTranslateZ();
+            double angleY = Math.toDegrees(Math.atan2(dx, dz));
+            keyBox3D.setRotationAxis(javafx.scene.transform.Rotate.Y_AXIS);
+            keyBox3D.setRotate(angleY);
         }
 
-        double px = (fpControl.getX() / TILE) * cellPx;
-        double py = (fpControl.getZ() / TILE) * cellPx;
-        double r = Math.max(2.0, cellPx * 0.35);
+        // Draw dynamic markers on the minimap
+        if (minimapOverlay != null && fpControl != null) {
+            GraphicsContext go = minimapOverlay.getGraphicsContext2D();
+            go.clearRect(0, 0, minimapOverlay.getWidth(), minimapOverlay.getHeight());
 
-        go.setFill(Color.RED);
-        go.fillOval(px - r/2.0, py - r/2.0, r, r);
+            // draw key marker if not yet taken
+            if (!keyTaken && keyGX >= 0 && keyGY >= 0) {
+                go.setFill(Color.BLUE);
+                go.fillRect(keyGX * cellPx, keyGY * cellPx, cellPx, cellPx);
+            }
+
+            double px = (fpControl.getX() / TILE) * cellPx;
+            double py = (fpControl.getZ() / TILE) * cellPx;
+            double r = Math.max(2.0, cellPx * 0.35);
+
+            go.setFill(Color.RED);
+            go.fillOval(px - r / 2.0, py - r / 2.0, r, r);
+        }
     }
 
     public void onKeyPicked() {
