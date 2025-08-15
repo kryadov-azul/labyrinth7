@@ -129,7 +129,7 @@ public class LabyrinthApp extends GameApplication {
     @Override
     protected void initSettings(GameSettings settings) {
         settings.setTitle("-=Yet Another Labyrinth=-");
-        settings.setVersion("1.0");
+        settings.setVersion("1.0.1");
         settings.setWidth(1280);
         settings.setHeight(720);
         settings.setMainMenuEnabled(true);
@@ -946,26 +946,32 @@ public class LabyrinthApp extends GameApplication {
         GraphicsContext g = healthBarCanvas.getGraphicsContext2D();
         double w = healthBarWidth;
         double h = healthBarHeight;
-        g.clearRect(0, 0, w, h);
-        // фон
-        g.setFill(Color.color(0, 0, 0, 0.55));
-        // скругления под вертикальную ориентацию — радиус по ширине
-        double r = w;
-        g.fillRoundRect(0, 0, w, h, r, r);
 
-        // красная заливка снизу вверх пропорционально здоровью
+        g.clearRect(0, 0, w, h);
+
+        // фон — овал
+        g.setFill(Color.color(0, 0, 0, 0.55));
+        g.fillOval(0, 0, w, h);
+
+        // красная заливка снизу вверх пропорционально здоровью (внутри овала)
         double p = Math.max(0, Math.min(100, playerHealth)) / 100.0;
         double fh = h * p;
         g.setFill(Color.DARKRED);
         g.setStroke(Color.DARKVIOLET);
         g.setFontSmoothingType(FontSmoothingType.LCD);
         g.setGlobalAlpha(0.8);
-        g.fillRoundRect(0, h - fh, w, fh, r, r);
 
-        // рамка
+        // Наложение только на уже нарисованный фон-овал
+        g.setGlobalBlendMode(javafx.scene.effect.BlendMode.SRC_ATOP);
+        g.fillRect(0, h - fh, w, fh);
+        // Сброс режима смешивания и альфы
+        g.setGlobalBlendMode(null);
+        g.setGlobalAlpha(1.0);
+
+        // рамка — овал
         g.setStroke(Color.color(1, 1, 1, 0.85));
         g.setLineWidth(2);
-        g.strokeRoundRect(1, 1, w - 2, h - 2, r, r);
+        g.strokeOval(1, 1, w - 2, h - 2);
     }
 
     public void damagePlayer(int amount) {
