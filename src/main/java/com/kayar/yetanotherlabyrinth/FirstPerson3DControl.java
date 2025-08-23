@@ -357,4 +357,8 @@ public class FirstPerson3DControl extends Component {
     public double getZ() {
         return z;
     }
+
+    public double getYaw() {
+        return yaw;
+    }
 }

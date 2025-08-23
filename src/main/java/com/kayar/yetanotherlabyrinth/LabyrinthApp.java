@@ -122,6 +122,106 @@ public class LabyrinthApp extends GameApplication {
     private double healthBarWidth = 14;
     private double healthBarHeight = 240;
 
+    // Enemies
+    private java.util.List<Enemy> enemies = new java.util.ArrayList<>();
+    private WritableImage[][] enemyFrames; // [row][col] 4x7
+    private static final long ENEMY_DAMAGE_INTERVAL_MS = 300;
+    private static final int ENEMY_DAMAGE = 10;
+
+    // --- Enemy inner class ---
+    private class Enemy {
+        double x, z;
+        double speed;
+        Box node;
+        PhongMaterial material;
+        // Patrol between two points
+        double x1, z1, x2, z2;
+        int target = 1; // 1 -> (x2,z2), 0 -> (x1,z1)
+        // Animation
+        double animAccum = 0;
+        int frame = 0;
+        int dirRow = 2; // 0=back,1=left,2=front,3=right
+        long lastDamageMs = 0;
+
+        Enemy(double x, double z, double x1, double z1, double x2, double z2, double speed, double width, double height, double depth) {
+            this.x = x;
+            this.z = z;
+            this.x1 = x1; this.z1 = z1; this.x2 = x2; this.z2 = z2;
+            this.speed = speed;
+            this.material = new PhongMaterial();
+            if (enemyFrames != null) {
+                this.material.setDiffuseMap(enemyFrames[dirRow][0]);
+            }
+            this.node = new Box(width, height, depth);
+            this.node.setMaterial(material);
+            // Place on floor so bottom touches y=0
+            this.node.setTranslateX(x);
+            this.node.setTranslateY(-height / 2.0);
+            this.node.setTranslateZ(z);
+        }
+
+        void update(double tpf, double playerX, double playerZ) {
+            if (isPlayerDead()) return;
+            // Move towards current target
+            double tx = (target == 1 ? x2 : x1);
+            double tz = (target == 1 ? z2 : z1);
+            double dx = tx - x;
+            double dz = tz - z;
+            double dist = Math.hypot(dx, dz);
+            double move = speed * tpf;
+            double nx = 0;
+            double nz = 0;
+            if (dist > 1e-4) {
+                nx = dx / dist;
+                nz = dz / dist;
+                double step = Math.min(move, dist);
+                x += nx * step;
+                z += nz * step;
+                // choose row by movement direction
+                if (Math.abs(nx) > Math.abs(nz)) {
+                    dirRow = nx > 0 ? 3 : 1; // right : left
+                } else {
+                    dirRow = nz > 0 ? 2 : 0; // front : back
+                }
+            } else {
+                // Switch target when reached
+                target = 1 - target;
+            }
+            node.setTranslateX(x);
+            node.setTranslateZ(z);
+            // Face movement direction if any
+            if (Math.abs(nx) + Math.abs(nz) > 1e-6) {
+                double angleY = Math.toDegrees(Math.atan2(nx, nz));
+                node.setRotationAxis(javafx.scene.transform.Rotate.Y_AXIS);
+                node.setRotate(angleY);
+            }
+
+            // Animate: advance frame every ~120ms
+            animAccum += tpf;
+            double frameTime = 0.12;
+            if (animAccum >= frameTime) {
+                int steps = (int) Math.floor(animAccum / frameTime);
+                animAccum -= steps * frameTime;
+                frame = (frame + steps) % 7;
+                if (enemyFrames != null) {
+                    material.setDiffuseMap(enemyFrames[dirRow][frame]);
+                }
+            }
+
+            // Contact damage every 300ms
+            double cdx = playerX - x;
+            double cdz = playerZ - z;
+            double contactR = TILE * 0.45;
+            if (cdx * cdx + cdz * cdz <= contactR * contactR) {
+                long now = System.currentTimeMillis();
+                if (now - lastDamageMs >= ENEMY_DAMAGE_INTERVAL_MS) {
+                    lastDamageMs = now;
+                    damagePlayer(ENEMY_DAMAGE);
+                }
+            }
+        }
+    }
+
     private Point2D cellCenter(int gx, int gy) {
         return new Point2D(gx * TILE + TILE / 2.0, gy * TILE + TILE / 2.0);
     }
@@ -310,6 +410,8 @@ public class LabyrinthApp extends GameApplication {
         getGameScene().clearUINodes();
         currentLevel++;
         levelStartMillis = System.currentTimeMillis();
+        // reset enemies for new level
+        enemies = new java.util.ArrayList<>();
 
         // Compute labyrinth size for this level: starting at 10x10 blocks, +2 each level
         int blocks = 4 + 2 * (currentLevel - 1);
@@ -545,6 +647,82 @@ public class LabyrinthApp extends GameApplication {
             keyGX = -1; keyGY = -1;
         }
 
+        // Load enemy sprite frames (4 rows x 7 cols)
+        try {
+            Image eSheet = image("enemy-1.png");
+            if (eSheet != null) {
+                int fw = (int) (eSheet.getWidth() / 7);
+                int fh = (int) (eSheet.getHeight() / 4);
+                PixelReader epr = eSheet.getPixelReader();
+                enemyFrames = new WritableImage[4][7];
+                for (int r = 0; r < 4; r++) {
+                    for (int c = 0; c < 7; c++) {
+                        enemyFrames[r][c] = new WritableImage(epr, c * fw, r * fh, fw, fh);
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            System.out.println("[DEBUG_LOG] Failed to load enemy sprites: " + ex.getMessage());
+            enemyFrames = null;
+        }
+
+        // Spawn enemies from level 3 onwards
+        int enemyCount = Math.max(0, currentLevel - 1);
+        if (enemyCount > 0) {
+            java.util.List<int[]> walkables = new java.util.ArrayList<>();
+            for (int gx = 0; gx < W; gx++) {
+                for (int gy = 0; gy < H; gy++) {
+                    if (maze[gx][gy]) continue; // wall
+                    if (pits[gx][gy]) continue; // avoid pits
+                    boolean isCorner = (gx == 1 && gy == 1) || (gx == W-2 && gy == H-2) || (gx == W-2 && gy == 1) || (gx == 1 && gy == H-2);
+                    if (isCorner) continue;
+                    if ((gx == 1 && gy == 1) || (gx == exitGX && gy == exitGY)) continue; // spawn/exit
+                    if (gx == keyGX && gy == keyGY) continue; // not on key
+                    walkables.add(new int[]{gx, gy});
+                }
+            }
+            java.util.Collections.shuffle(walkables);
+            int toSpawn = Math.min(enemyCount, walkables.size());
+            for (int i = 0; i < toSpawn; i++) {
+                int[] cell = walkables.get(i);
+                int sx = cell[0];
+                int sy = cell[1];
+
+                // find corridor endpoints horizontally
+                int left = sx;
+                while (left - 1 >= 0 && !maze[left - 1][sy] && !pits[left - 1][sy]) left--;
+                int right = sx;
+                while (right + 1 < W && !maze[right + 1][sy] && !pits[right + 1][sy]) right++;
+                // vertically
+                int up = sy;
+                while (up - 1 >= 0 && !maze[sx][up - 1] && !pits[sx][up - 1]) up--;
+                int down = sy;
+                while (down + 1 < H && !maze[sx][down + 1] && !pits[sx][down + 1]) down++;
+
+                int spanH = right - left;
+                int spanV = down - up;
+                int gx1, gy1, gx2, gy2;
+                if (spanH >= spanV) {
+                    gx1 = left; gy1 = sy; gx2 = right; gy2 = sy;
+                } else {
+                    gx1 = sx; gy1 = up; gx2 = sx; gy2 = down;
+                }
+
+                Point2D pStart = cellCenter(sx, sy);
+                Point2D p1 = cellCenter(gx1, gy1);
+                Point2D p2 = cellCenter(gx2, gy2);
+
+                double width = TILE * 0.9;
+                double height = TILE * 1.25;
+                double depth = TILE * 0.12;
+                double espeed = TILE * (1.1 + Math.min(0.9, currentLevel * 0.08));
+
+                Enemy enemy = new Enemy(pStart.getX(), pStart.getY(), p1.getX(), p1.getY(), p2.getX(), p2.getY(), espeed, width, height, depth);
+                enemies.add(enemy);
+                root3D.getChildren().add(enemy.node);
+            }
+        }
+
         // Camera and 3D subscene
         camera = new PerspectiveCamera(true);
         camera.setNearClip(0.1);
@@ -727,12 +905,57 @@ public class LabyrinthApp extends GameApplication {
                 go.fillRect(keyGX * cellPx, keyGY * cellPx, cellPx, cellPx);
             }
 
+            // draw player marker as an oriented arrow (triangle) showing facing direction
             double px = (fpControl.getX() / TILE) * cellPx;
             double py = (fpControl.getZ() / TILE) * cellPx;
-            double r = Math.max(2.0, cellPx * 0.35);
+            double yaw = fpControl.getYaw();
+            double yawRad = Math.toRadians(yaw);
+            double dirX = Math.sin(yawRad);
+            double dirY = Math.cos(yawRad); // map world Z to minimap Y
+            double lenDir = Math.hypot(dirX, dirY);
+            if (lenDir < 1e-6) { dirX = 0; dirY = -1; lenDir = 1; }
+            dirX /= lenDir; dirY /= lenDir;
+
+            double L = Math.max(6.0, cellPx * 0.9);  // arrow length
+            double W = Math.max(3.0, cellPx * 0.55); // arrow width
+
+            // tip point (forward)
+            double tipX = px + dirX * (L * 0.6);
+            double tipY = py + dirY * (L * 0.6);
+            // base center behind
+            double baseCX = px - dirX * (L * 0.35);
+            double baseCY = py - dirY * (L * 0.35);
+            double halfW = W / 2.0;
+            // perpendicular vector
+            double perpX = -dirY;
+            double perpY = dirX;
+            double leftX = baseCX + perpX * halfW;
+            double leftY = baseCY + perpY * halfW;
+            double rightX = baseCX - perpX * halfW;
+            double rightY = baseCY - perpY * halfW;
 
             go.setFill(Color.RED);
-            go.fillOval(px - r / 2.0, py - r / 2.0, r, r);
+            go.fillPolygon(new double[]{tipX, rightX, leftX}, new double[]{tipY, rightY, leftY}, 3);
+
+            // draw enemies as orange squares
+            if (enemies != null && !enemies.isEmpty()) {
+                go.setFill(Color.ORANGE);
+                double er = Math.max(2.0, cellPx * 0.28);
+                for (Enemy e : enemies) {
+                    double ex = (e.x / TILE) * cellPx;
+                    double ey = (e.z / TILE) * cellPx;
+                    go.fillRect(ex - er / 2.0, ey - er / 2.0, er, er);
+                }
+            }
+        }
+
+        // Update enemies
+        if (fpControl != null && enemies != null && !enemies.isEmpty()) {
+            double pxWorld = fpControl.getX();
+            double pzWorld = fpControl.getZ();
+            for (Enemy e : enemies) {
+                e.update(tpf, pxWorld, pzWorld);
+            }
         }
     }
 
